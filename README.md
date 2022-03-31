@@ -1,14 +1,22 @@
-# Project
+# Kiota Http Library for Go
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+![Go](https://github.com/microsoft/kiota/actions/workflows/http-go-nethttp.yml/badge.svg)
 
-As the maintainer of this project, please make a few updates:
+The Kiota HTTP Library for Go is the Go HTTP library implementation with [net/http](https://pkg.go.dev/net/http).
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+A [Kiota](https://github.com/microsoft/kiota) generated project will need a reference to a HTTP package to make HTTP requests to an API endpoint.
+
+Read more about Kiota [here](https://github.com/microsoft/kiota/blob/main/README.md).
+
+## Using the Kiota Http Library for Go
+
+```Shell
+go get github.com/microsoft/kiota-http-go
+```
+
+```Golang
+httpAdapter, err := kiotahttp.NewNetHttpRequestAdapter(authProvider)
+```
 
 ## Contributing
 

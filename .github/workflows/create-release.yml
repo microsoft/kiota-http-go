@@ -1,0 +1,21 @@
+name: Create GitHub release
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  create_release:
+    name: Create Release
+    environment:
+      name: gh_releases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Release
+        uses: anton-yurchenko/git-release@v4.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRAFT_RELEASE: "false"
+          PRE_RELEASE: "false"
+          CHANGELOG_FILE: "CHANGELOG.md"
+          ALLOW_EMPTY_CHANGELOG: "true"
