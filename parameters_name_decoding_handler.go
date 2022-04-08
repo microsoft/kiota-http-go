@@ -8,11 +8,15 @@ import (
 	abs "github.com/microsoft/kiota-abstractions-go"
 )
 
+// ParametersNameDecodingOptions defines the options for the ParametersNameDecodingHandler
 type ParametersNameDecodingOptions struct {
-	Enable             bool
+	// Enable defines if the parameters name decoding should be enabled
+	Enable bool
+	// ParametersToDecode defines the characters that should be decoded
 	ParametersToDecode []byte
 }
 
+// ParametersNameDecodingHandler decodes special characters in the request query parameters that had to be encoded due to RFC 6570 restrictions names before executing the request.
 type ParametersNameDecodingHandler struct {
 	options ParametersNameDecodingOptions
 }
