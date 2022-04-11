@@ -13,8 +13,7 @@ func TestItDecodesQueryParameterNames(t *testing.T) {
 		{"?%24select=diplayName&api%2Dversion=2", "/?$select=diplayName&api-version=2"},
 		{"?%24select=diplayName&api%7Eversion=2", "/?$select=diplayName&api~version=2"},
 		{"?%24select=diplayName&api%2Eversion=2", "/?$select=diplayName&api.version=2"},
-		{"?%24select=diplayName&api%2Eversion=2", "/?$select=diplayName&api.version=2"},
-		{"?%24select=diplayName&api%2Dversion=2", "/?$select=diplayName&api-version=2"},
+		{"/api-version/?%24select=diplayName&api%2Eversion=2", "/api-version/?$select=diplayName&api.version=2"},
 		{"", "/"},
 	}
 	result := ""
