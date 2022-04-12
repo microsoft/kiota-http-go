@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.2.0] - 2022-04-08
+
+### Added
+
+- Added support for decoding special characters in query parameters names.
+
 ## [0.1.0] - 2022-03-30
 
 ### Added
