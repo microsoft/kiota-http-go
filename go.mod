@@ -3,7 +3,7 @@ module github.com/microsoft/kiota-http-go
 go 1.18
 
 require (
-	github.com/microsoft/kiota-abstractions-go v0.4.0
+	github.com/microsoft/kiota-abstractions-go v0.5.0
 	github.com/stretchr/testify v1.7.1
 )
 
