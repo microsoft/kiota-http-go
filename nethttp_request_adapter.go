@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io/ioutil"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -88,9 +89,13 @@ func (a *NetHttpRequestAdapter) SetBaseUrl(baseUrl string) {
 func (a *NetHttpRequestAdapter) GetBaseUrl() string {
 	return a.baseUrl
 }
-func (a *NetHttpRequestAdapter) getHttpResponseMessage(requestInfo *abs.RequestInformation) (*nethttp.Response, error) {
+func (a *NetHttpRequestAdapter) getHttpResponseMessage(requestInfo *abs.RequestInformation, claims string) (*nethttp.Response, error) {
 	a.setBaseUrlForRequestInformation(requestInfo)
-	err := a.authenticationProvider.AuthenticateRequest(requestInfo)
+	additionalContext := make(map[string]interface{})
+	if claims != "" {
+		additionalContext[claimsKey] = claims
+	}
+	err := a.authenticationProvider.AuthenticateRequest(requestInfo, additionalContext)
 	if err != nil {
 		return nil, err
 	}
@@ -98,8 +103,40 @@ func (a *NetHttpRequestAdapter) getHttpResponseMessage(requestInfo *abs.RequestI
 	if err != nil {
 		return nil, err
 	}
-	return (*a.httpClient).Do(request)
+	response, err := (*a.httpClient).Do(request)
+	if err != nil {
+		return nil, err
+	}
+	return a.retryCAEResponseIfRequired(response, requestInfo, claims)
 }
+
+const claimsKey = "claims"
+
+var reBearer = regexp.MustCompile(`(?i)^Bearer\s`)
+var reClaims = regexp.MustCompile(`\"([^\"]*)\"`)
+
+func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(response *nethttp.Response, requestInfo *abs.RequestInformation, claims string) (*nethttp.Response, error) {
+	if response.StatusCode == 401 &&
+		claims == "" { //avoid infinite loop, we only retry once
+		authenticateHeaderVal := response.Header.Get("WWW-Authenticate")
+		if authenticateHeaderVal != "" && reBearer.Match([]byte(authenticateHeaderVal)) {
+			responseClaims := ""
+			parametersRaw := string(reBearer.ReplaceAll([]byte(authenticateHeaderVal), []byte("")))
+			parameters := strings.Split(parametersRaw, ",")
+			for _, parameter := range parameters {
+				if strings.HasPrefix(strings.Trim(parameter, " "), claimsKey) {
+					responseClaims = reClaims.FindStringSubmatch(parameter)[1]
+					break
+				}
+			}
+			if responseClaims != "" {
+				return a.getHttpResponseMessage(requestInfo, responseClaims)
+			}
+		}
+	}
+	return response, nil
+}
+
 func (a *NetHttpRequestAdapter) getResponsePrimaryContentType(response *nethttp.Response) string {
 	if response.Header == nil {
 		return ""
@@ -143,7 +180,7 @@ func (a *NetHttpRequestAdapter) SendAsync(requestInfo *abs.RequestInformation, c
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
-	response, err := a.getHttpResponseMessage(requestInfo)
+	response, err := a.getHttpResponseMessage(requestInfo, "")
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +215,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(requestInfo *abs.RequestInfo
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
-	response, err := a.getHttpResponseMessage(requestInfo)
+	response, err := a.getHttpResponseMessage(requestInfo, "")
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +250,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(requestInfo *abs.RequestInfor
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
-	response, err := a.getHttpResponseMessage(requestInfo)
+	response, err := a.getHttpResponseMessage(requestInfo, "")
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +306,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(requestInfo *abs.Re
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
-	response, err := a.getHttpResponseMessage(requestInfo)
+	response, err := a.getHttpResponseMessage(requestInfo, "")
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +340,7 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(requestInfo *abs.RequestInfor
 	if requestInfo == nil {
 		return errors.New("requestInfo cannot be nil")
 	}
-	response, err := a.getHttpResponseMessage(requestInfo)
+	response, err := a.getHttpResponseMessage(requestInfo, "")
 	if err != nil {
 		return err
 	}
