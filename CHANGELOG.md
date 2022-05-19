@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.4.1] - 2022-05-19
+
+### Changed
+
+- Fixed a bug where CAE support would leak connections when retrying.
+
 ## [0.4.0] - 2022-05-18
 
 ### Added

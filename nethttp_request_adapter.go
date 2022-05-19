@@ -130,6 +130,7 @@ func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(response *nethttp.Res
 				}
 			}
 			if responseClaims != "" {
+				defer a.purge(response)
 				return a.getHttpResponseMessage(requestInfo, responseClaims)
 			}
 		}
