@@ -211,6 +211,41 @@ func (a *NetHttpRequestAdapter) SendAsync(requestInfo *abs.RequestInformation, c
 	}
 }
 
+// SendEnumAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model.
+func (a *NetHttpRequestAdapter) SendEnumAsync(requestInfo *abs.RequestInformation, parser absser.EnumFactory, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) (interface{}, error) {
+	if requestInfo == nil {
+		return nil, errors.New("requestInfo cannot be nil")
+	}
+	response, err := a.getHttpResponseMessage(requestInfo, "")
+	if err != nil {
+		return nil, err
+	}
+	if responseHandler != nil {
+		result, err := responseHandler(response, errorMappings)
+		if err != nil {
+			return nil, err
+		}
+		return result.(absser.Parsable), nil
+	} else if response != nil {
+		defer a.purge(response)
+		err = a.throwFailedResponses(response, errorMappings)
+		if err != nil {
+			return nil, err
+		}
+		if a.shouldReturnNil(response) {
+			return nil, err
+		}
+		parseNode, err := a.getRootParseNode(response)
+		if err != nil {
+			return nil, err
+		}
+		result, err := parseNode.GetEnumValue(parser)
+		return result, err
+	} else {
+		return nil, errors.New("response is nil")
+	}
+}
+
 // SendCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
 func (a *NetHttpRequestAdapter) SendCollectionAsync(requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) ([]absser.Parsable, error) {
 	if requestInfo == nil {
@@ -240,6 +275,41 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(requestInfo *abs.RequestInfo
 			return nil, err
 		}
 		result, err := parseNode.GetCollectionOfObjectValues(constructor)
+		return result, err
+	} else {
+		return nil, errors.New("response is nil")
+	}
+}
+
+// SendEnumCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
+func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(requestInfo *abs.RequestInformation, parser absser.EnumFactory, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) ([]interface{}, error) {
+	if requestInfo == nil {
+		return nil, errors.New("requestInfo cannot be nil")
+	}
+	response, err := a.getHttpResponseMessage(requestInfo, "")
+	if err != nil {
+		return nil, err
+	}
+	if responseHandler != nil {
+		result, err := responseHandler(response, errorMappings)
+		if err != nil {
+			return nil, err
+		}
+		return result.([]interface{}), nil
+	} else if response != nil {
+		defer a.purge(response)
+		err = a.throwFailedResponses(response, errorMappings)
+		if err != nil {
+			return nil, err
+		}
+		if a.shouldReturnNil(response) {
+			return nil, err
+		}
+		parseNode, err := a.getRootParseNode(response)
+		if err != nil {
+			return nil, err
+		}
+		result, err := parseNode.GetCollectionOfEnumValues(parser)
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
