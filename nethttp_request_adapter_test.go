@@ -42,3 +42,12 @@ func TestItRetriesOnCAEResponse(t *testing.T) {
 	assert.Nil(t, err2)
 	assert.Equal(t, 2, methodCallCount)
 }
+
+func TestImplementationHonoursInterface(t *testing.T) {
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.Nil(t, err)
+	assert.NotNil(t, adapter)
+
+	assert.Implements(t, (*abs.RequestAdapter)(nil), adapter)
+}
