@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/microsoft/kiota-abstractions-go v0.8.1
-	github.com/stretchr/testify v1.7.2
+	github.com/stretchr/testify v1.7.4
 )
 
 require (
