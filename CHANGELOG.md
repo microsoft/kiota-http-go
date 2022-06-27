@@ -11,9 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-## [0.5.2]
+## [0.5.2] - 2022-06-27
 
 ### Changed
+
 - Fixed an issue where response error was ignored for Patch calls
 
 ## [0.5.1] - 2022-06-07
