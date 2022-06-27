@@ -421,6 +421,9 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(requestInfo *abs.RequestInfor
 	} else if response != nil {
 		defer a.purge(response)
 		err = a.throwFailedResponses(response, errorMappings)
+		if err != nil {
+			return err
+		}
 		return nil
 	} else {
 		return errors.New("response is nil")
