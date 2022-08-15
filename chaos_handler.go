@@ -167,8 +167,7 @@ func getStatusCode(handler *ChaosHandler, req *nethttp.Request) int {
 			return handlerOptions.StatusCode
 		} else {
 			relativeUrl := getRelativeURL(handlerOptions, requestURL)
-			definedResponses := statusMap[relativeUrl]
-			if definedResponses != nil {
+			if definedResponses, ok := statusMap[relativeUrl]; ok {
 				if mapCode, mapCodeOk := definedResponses[requestMethod]; mapCodeOk {
 					return mapCode
 				}
