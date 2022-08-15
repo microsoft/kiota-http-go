@@ -13,19 +13,19 @@ import (
 type ChaosStrategy int
 
 const (
-	Manual ChaosStrategy = 0
-	Random               = 1
+	Manual ChaosStrategy = iota
+	Random
 )
 
 // ChaosHandlerOptions is a configuration struct holding behavior defined options for a chaos handler
 //
 // BaseUrl represent the host url for in
 // ChaosStrategy Specifies the strategy used for the Testing Handler -> RANDOM/MANUAL
-// StatusCode Status code to be returned in the response
-// StatusMessage Message to be returned in the response
+// StatusCode Status code to be returned as part of the error response
+// StatusMessage Message to be returned as part of the error response
 // ChaosPercentage The percentage of randomness/chaos in the handler
-// ResponseBody The response body to be returned in the response
-// Headers The response headers to be returned in the response
+// ResponseBody The response body to be returned as part of the error response
+// Headers The response headers to be returned as part of the error response
 // StatusMap The Map passed by user containing url-statusCode info
 type ChaosHandlerOptions struct {
 	BaseUrl         string
@@ -74,11 +74,11 @@ func (handlerOptions *ChaosHandlerOptions) GetResponseBody() *nethttp.Response {
 	return handlerOptions.ResponseBody
 }
 
-func (handlerOptions ChaosHandlerOptions) GetHeaders() map[string][]string {
+func (handlerOptions *ChaosHandlerOptions) GetHeaders() map[string][]string {
 	return handlerOptions.Headers
 }
 
-func (handlerOptions ChaosHandlerOptions) GetStatusMap() map[string]map[string]int {
+func (handlerOptions *ChaosHandlerOptions) GetStatusMap() map[string]map[string]int {
 	return handlerOptions.StatusMap
 }
 
@@ -89,7 +89,7 @@ type ChaosHandler struct {
 var chaosHandlerKey = abstractions.RequestOptionKey{Key: "ChaosHandler"}
 
 // GetKey returns ChaosHandlerOptions unique name in context object
-func (handlerOptions ChaosHandlerOptions) GetKey() abstractions.RequestOptionKey {
+func (handlerOptions *ChaosHandlerOptions) GetKey() abstractions.RequestOptionKey {
 	return chaosHandlerKey
 }
 
@@ -223,8 +223,8 @@ func getStatusCode(handlerOptions chaosHandlerOptionsInt, req *nethttp.Request) 
 					return mapCode
 				}
 			} else {
-				for key, _ := range statusMap {
-					match, _ := regexp.MatchString(key+"$", "peach")
+				for key := range statusMap {
+					match, _ := regexp.MatchString(key+"$", relativeUrl)
 					if match {
 						responseCode := statusMap[key][requestMethod]
 						if responseCode != 0 {

@@ -15,7 +15,7 @@ func TestItCreatesANewChaosHandler(t *testing.T) {
 }
 
 func TestItCreatesANewChaosHandlerWithInvalidOptions(t *testing.T) {
-	_, err := NewChaosHandlerWithOptions(ChaosHandlerOptions{
+	_, err := NewChaosHandlerWithOptions(&ChaosHandlerOptions{
 		ChaosPercentage: 101,
 		ChaosStrategy:   Random,
 	})
@@ -25,7 +25,7 @@ func TestItCreatesANewChaosHandlerWithInvalidOptions(t *testing.T) {
 }
 
 func TestItCreatesANewChaosHandlerWithOptions(t *testing.T) {
-	options := ChaosHandlerOptions{
+	options := &ChaosHandlerOptions{
 		ChaosPercentage: 100,
 		ChaosStrategy:   Random,
 		StatusCode:      400,
@@ -40,7 +40,10 @@ func TestItCreatesANewChaosHandlerWithOptions(t *testing.T) {
 
 	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
 		res.WriteHeader(200)
-		res.Write([]byte("body"))
+		_, err := res.Write([]byte("body"))
+		if err != nil {
+			t.Error(err)
+		}
 	}))
 	req, err := nethttp.NewRequest(nethttp.MethodGet, testServer.URL, nil)
 	if err != nil {
