@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"errors"
+	abstractions "github.com/microsoft/kiota-abstractions-go"
 	"io"
 	"math/rand"
 	nethttp "net/http"
@@ -16,7 +17,7 @@ const (
 	Random               = 1
 )
 
-// ChaosHandlerOptions is a configuration struct holding options for a chaos handler
+// ChaosHandlerOptions is a configuration struct holding behavior defined options for a chaos handler
 //
 // BaseUrl represent the host url for in
 // ChaosStrategy Specifies the strategy used for the Testing Handler -> RANDOM/MANUAL
@@ -37,12 +38,63 @@ type ChaosHandlerOptions struct {
 	StatusMap       map[string]map[string]int
 }
 
+type chaosHandlerOptionsInt interface {
+	abstractions.RequestOption
+	GetBaseUrl() string
+	GetChaosStrategy() ChaosStrategy
+	GetStatusCode() int
+	GetStatusMessage() string
+	GetChaosPercentage() int
+	GetResponseBody() *nethttp.Response
+	GetHeaders() map[string][]string
+	GetStatusMap() map[string]map[string]int
+}
+
+func (handlerOptions *ChaosHandlerOptions) GetBaseUrl() string {
+	return handlerOptions.BaseUrl
+}
+
+func (handlerOptions *ChaosHandlerOptions) GetChaosStrategy() ChaosStrategy {
+	return handlerOptions.ChaosStrategy
+}
+
+func (handlerOptions *ChaosHandlerOptions) GetStatusCode() int {
+	return handlerOptions.StatusCode
+}
+
+func (handlerOptions *ChaosHandlerOptions) GetStatusMessage() string {
+	return handlerOptions.StatusMessage
+}
+
+func (handlerOptions *ChaosHandlerOptions) GetChaosPercentage() int {
+	return handlerOptions.ChaosPercentage
+}
+
+func (handlerOptions *ChaosHandlerOptions) GetResponseBody() *nethttp.Response {
+	return handlerOptions.ResponseBody
+}
+
+func (handlerOptions ChaosHandlerOptions) GetHeaders() map[string][]string {
+	return handlerOptions.Headers
+}
+
+func (handlerOptions ChaosHandlerOptions) GetStatusMap() map[string]map[string]int {
+	return handlerOptions.StatusMap
+}
+
 type ChaosHandler struct {
 	options *ChaosHandlerOptions
 }
 
+var chaosHandlerKey = abstractions.RequestOptionKey{Key: "ChaosHandler"}
+
+// GetKey returns ChaosHandlerOptions unique name in context object
+func (handlerOptions ChaosHandlerOptions) GetKey() abstractions.RequestOptionKey {
+	return chaosHandlerKey
+}
+
 // NewChaosHandlerWithOptions creates a new ChaosHandler with the configured options
-func NewChaosHandlerWithOptions(handlerOptions ChaosHandlerOptions) (*ChaosHandler, error) {
+func NewChaosHandlerWithOptions(handlerOptions *ChaosHandlerOptions) (*ChaosHandler, error) {
 	if handlerOptions.ChaosPercentage < 0 || handlerOptions.ChaosPercentage > 100 {
 		return nil, errors.New("ChaosPercentage must be between 0 and 100")
 	}
@@ -52,7 +104,7 @@ func NewChaosHandlerWithOptions(handlerOptions ChaosHandlerOptions) (*ChaosHandl
 		}
 	}
 
-	return &ChaosHandler{options: &handlerOptions}, nil
+	return &ChaosHandler{options: handlerOptions}, nil
 }
 
 // NewChaosHandler creates a new ChaosHandler with default configuration options of Random errors at 10%
@@ -70,7 +122,7 @@ var methodStatusCode = map[string][]int{
 	"GET":    {429, 500, 502, 503, 504},
 	"POST":   {429, 500, 502, 503, 504, 507},
 	"PUT":    {429, 500, 502, 503, 504, 507},
-	"PATCH":  {429, 500, 502, 503, 504429, 500, 502, 503, 504},
+	"PATCH":  {429, 500, 502, 503, 504},
 	"DELETE": {429, 500, 502, 503, 504, 507},
 }
 
@@ -143,8 +195,8 @@ func generateRandomStatusCode(request *nethttp.Request) int {
 	return statusCodeArray[rand.Intn(len(statusCodeArray))]
 }
 
-func getRelativeURL(handlerOptions *ChaosHandlerOptions, url string) string {
-	baseUrl := handlerOptions.BaseUrl
+func getRelativeURL(handlerOptions chaosHandlerOptionsInt, url string) string {
+	baseUrl := handlerOptions.GetBaseUrl()
 	if baseUrl != "" {
 		return strings.Replace(url, baseUrl, "", 1)
 	} else {
@@ -152,19 +204,18 @@ func getRelativeURL(handlerOptions *ChaosHandlerOptions, url string) string {
 	}
 }
 
-func getStatusCode(handler *ChaosHandler, req *nethttp.Request) int {
-	handlerOptions := handler.options
+func getStatusCode(handlerOptions chaosHandlerOptionsInt, req *nethttp.Request) int {
 	requestMethod := req.Method
-	statusMap := handler.options.StatusMap
+	statusMap := handlerOptions.GetStatusMap()
 	requestURL := req.RequestURI
 
-	if handlerOptions.ChaosStrategy == Manual {
-		return handler.options.StatusCode
+	if handlerOptions.GetChaosStrategy() == Manual {
+		return handlerOptions.GetStatusCode()
 	}
 
-	if handlerOptions.ChaosStrategy == Random {
-		if handlerOptions.StatusCode > 0 {
-			return handlerOptions.StatusCode
+	if handlerOptions.GetChaosStrategy() == Random {
+		if handlerOptions.GetStatusCode() > 0 {
+			return handlerOptions.GetStatusCode()
 		} else {
 			relativeUrl := getRelativeURL(handlerOptions, requestURL)
 			if definedResponses, ok := statusMap[relativeUrl]; ok {
@@ -188,15 +239,15 @@ func getStatusCode(handler *ChaosHandler, req *nethttp.Request) int {
 	return generateRandomStatusCode(req)
 }
 
-func createResponseBody(handler *ChaosHandler, statusCode int) *nethttp.Response {
-	if handler.options.ResponseBody != nil {
-		return handler.options.ResponseBody
+func createResponseBody(handlerOptions chaosHandlerOptionsInt, statusCode int) *nethttp.Response {
+	if handlerOptions.GetResponseBody() != nil {
+		return handlerOptions.GetResponseBody()
 	}
 
 	var stringReader *strings.Reader
 	if statusCode > 400 {
 		codeMessage := httpStatusCode[statusCode]
-		errMessage := handler.options.StatusMessage
+		errMessage := handlerOptions.GetStatusMessage()
 		stringReader = strings.NewReader("error : { code :  " + codeMessage + " , message : " + errMessage + " }")
 	} else {
 		stringReader = strings.NewReader("{}")
@@ -204,21 +255,26 @@ func createResponseBody(handler *ChaosHandler, statusCode int) *nethttp.Response
 
 	return &nethttp.Response{
 		StatusCode: statusCode,
-		Status:     handler.options.StatusMessage,
+		Status:     handlerOptions.GetStatusMessage(),
 		Body:       io.NopCloser(stringReader),
-		Header:     handler.options.Headers,
+		Header:     handlerOptions.GetHeaders(),
 	}
 }
 
-func createChaosResponse(handler *ChaosHandler, req *nethttp.Request) (*nethttp.Response, error) {
+func createChaosResponse(handler chaosHandlerOptionsInt, req *nethttp.Request) (*nethttp.Response, error) {
 	statusCode := getStatusCode(handler, req)
 	responseBody := createResponseBody(handler, statusCode)
 	return responseBody, nil
 }
 
 func (middleware ChaosHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
-	if rand.Intn(100) < middleware.options.ChaosPercentage {
-		return createChaosResponse(&middleware, req)
+	reqOption, ok := req.Context().Value(chaosHandlerKey).(chaosHandlerOptionsInt)
+	if !ok {
+		reqOption = middleware.options
+	}
+
+	if rand.Intn(100) < reqOption.GetChaosPercentage() {
+		return createChaosResponse(reqOption, req)
 	}
 
 	return pipeline.Next(req, middlewareIndex)
