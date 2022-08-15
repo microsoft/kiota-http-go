@@ -95,6 +95,10 @@ func (handlerOptions *ChaosHandlerOptions) GetKey() abstractions.RequestOptionKe
 
 // NewChaosHandlerWithOptions creates a new ChaosHandler with the configured options
 func NewChaosHandlerWithOptions(handlerOptions *ChaosHandlerOptions) (*ChaosHandler, error) {
+	if handlerOptions == nil {
+		return nil, errors.New("unexpected argument ChaosHandlerOptions as nil")
+	}
+
 	if handlerOptions.ChaosPercentage < 0 || handlerOptions.ChaosPercentage > 100 {
 		return nil, errors.New("ChaosPercentage must be between 0 and 100")
 	}
