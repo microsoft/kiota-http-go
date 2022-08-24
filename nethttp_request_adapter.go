@@ -147,16 +147,22 @@ func (a *NetHttpRequestAdapter) getResponsePrimaryContentType(response *nethttp.
 	splat := strings.Split(rawType, ";")
 	return strings.ToLower(splat[0])
 }
+
 func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs.RequestInformation) {
 	requestInfo.PathParameters["baseurl"] = a.GetBaseUrl()
 }
 
+<<<<<<< HEAD
 const requestTimeOutInSeconds = 100
 
 func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Context, requestInfo *abs.RequestInformation) (*nethttp.Request, error) {
 	uri, err := requestInfo.GetUri()
 	if err != nil {
 		return nil, err
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	// add deadline of not set
@@ -183,7 +189,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		}
 	}
 	for _, value := range requestInfo.GetRequestOptions() {
-		request = request.WithContext(context.WithValue(ctx, value.GetKey(), value))
+		request = request.WithContext(context.WithValue(ctx.Context(), value.GetKey(), value))
 	}
 	return request, nil
 }
