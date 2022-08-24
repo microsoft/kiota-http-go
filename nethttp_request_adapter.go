@@ -96,7 +96,7 @@ func (a *NetHttpRequestAdapter) getHttpResponseMessage(ctx context.Context, requ
 	if claims != "" {
 		additionalContext[claimsKey] = claims
 	}
-	err := a.authenticationProvider.AuthenticateRequest(requestInfo, additionalContext)
+	err := a.authenticationProvider.AuthenticateRequest(ctx, requestInfo, additionalContext)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,6 @@ func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs
 	requestInfo.PathParameters["baseurl"] = a.GetBaseUrl()
 }
 
-<<<<<<< HEAD
 const requestTimeOutInSeconds = 100
 
 func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Context, requestInfo *abs.RequestInformation) (*nethttp.Request, error) {
@@ -189,7 +188,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		}
 	}
 	for _, value := range requestInfo.GetRequestOptions() {
-		request = request.WithContext(context.WithValue(ctx.Context(), value.GetKey(), value))
+		request = request.WithContext(context.WithValue(ctx, value.GetKey(), value))
 	}
 	return request, nil
 }
