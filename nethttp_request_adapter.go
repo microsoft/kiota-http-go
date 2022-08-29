@@ -204,6 +204,9 @@ func (a *NetHttpRequestAdapter) SendAsync(requestInfo *abs.RequestInformation, c
 		if err != nil {
 			return nil, err
 		}
+		if parseNode == nil {
+			return nil, nil
+		}
 		result, err := parseNode.GetObjectValue(constructor)
 		return result, err
 	} else {
@@ -238,6 +241,9 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(requestInfo *abs.RequestInformatio
 		parseNode, err := a.getRootParseNode(response)
 		if err != nil {
 			return nil, err
+		}
+		if parseNode == nil {
+			return nil, nil
 		}
 		result, err := parseNode.GetEnumValue(parser)
 		return result, err
@@ -274,6 +280,9 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(requestInfo *abs.RequestInfo
 		if err != nil {
 			return nil, err
 		}
+		if parseNode == nil {
+			return nil, nil
+		}
 		result, err := parseNode.GetCollectionOfObjectValues(constructor)
 		return result, err
 	} else {
@@ -308,6 +317,9 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(requestInfo *abs.Request
 		parseNode, err := a.getRootParseNode(response)
 		if err != nil {
 			return nil, err
+		}
+		if parseNode == nil {
+			return nil, nil
 		}
 		result, err := parseNode.GetCollectionOfEnumValues(parser)
 		return result, err
@@ -346,6 +358,9 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(requestInfo *abs.RequestInfor
 		parseNode, err := a.getRootParseNode(response)
 		if err != nil {
 			return nil, err
+		}
+		if parseNode == nil {
+			return nil, nil
 		}
 		switch typeName {
 		case "string":
@@ -400,6 +415,9 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(requestInfo *abs.Re
 		if err != nil {
 			return nil, err
 		}
+		if parseNode == nil {
+			return nil, nil
+		}
 		return parseNode.GetCollectionOfPrimitiveValues(typeName)
 	} else {
 		return nil, errors.New("response is nil")
@@ -435,7 +453,11 @@ func (a *NetHttpRequestAdapter) getRootParseNode(response *nethttp.Response) (ab
 	if err != nil {
 		return nil, err
 	}
-	return a.parseNodeFactory.GetRootParseNode(a.getResponsePrimaryContentType(response), body)
+	contentType := a.getResponsePrimaryContentType(response)
+	if contentType == "" {
+		return nil, nil
+	}
+	return a.parseNodeFactory.GetRootParseNode(contentType, body)
 }
 func (a *NetHttpRequestAdapter) purge(response *nethttp.Response) error {
 	_, _ = ioutil.ReadAll(response.Body) //we don't care about errors comming from reading the body, just trying to purge anything that maybe left
@@ -475,6 +497,11 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(response *nethttp.Response,
 	rootNode, err := a.getRootParseNode(response)
 	if err != nil {
 		return err
+	}
+	if rootNode == nil {
+		return &abs.ApiError{
+			Message: "The server returned an unexpected status code with no response body: " + statusAsString,
+		}
 	}
 
 	errValue, err := rootNode.GetObjectValue(errorCtor)

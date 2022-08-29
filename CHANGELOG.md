@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.6.1] - 2022-08-29
+
+### Changed
+
+- Fixed a bug where an error would be returned for a 201 response with described response.
+
 ## [0.6.0] - 2022-08-17
 
 ### Added

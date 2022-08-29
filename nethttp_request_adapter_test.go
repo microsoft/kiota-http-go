@@ -51,3 +51,25 @@ func TestImplementationHonoursInterface(t *testing.T) {
 
 	assert.Implements(t, (*abs.RequestAdapter)(nil), adapter)
 }
+
+func TestItDoesntFailOnEmptyContentType(t *testing.T) {
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.WriteHeader(201)
+	}))
+	defer func() { testServer.Close() }()
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.Nil(t, err)
+	assert.NotNil(t, adapter)
+
+	uri, err := url.Parse(testServer.URL)
+	assert.Nil(t, err)
+	assert.NotNil(t, uri)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	res, err := adapter.SendAsync(request, nil, nil, nil)
+	assert.Nil(t, err)
+	assert.Nil(t, res)
+}
