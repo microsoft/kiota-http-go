@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.6.2] - 2022-08-30
+
+### Added
+
+- Default 100 secs timeout for all request with a default context.
+
 ## [0.6.1] - 2022-08-29
 
 ### Changed

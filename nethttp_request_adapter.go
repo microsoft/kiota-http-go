@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	ctx "context"
 	nethttp "net/http"
@@ -149,12 +150,19 @@ func (a *NetHttpRequestAdapter) getResponsePrimaryContentType(response *nethttp.
 func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs.RequestInformation) {
 	requestInfo.PathParameters["baseurl"] = a.GetBaseUrl()
 }
+
+const requestTimeOutInSeconds = 100
+
 func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(requestInfo *abs.RequestInformation) (*nethttp.Request, error) {
 	uri, err := requestInfo.GetUri()
 	if err != nil {
 		return nil, err
 	}
-	request, err := nethttp.NewRequest(requestInfo.Method.String(), uri.String(), nil)
+
+	context, cancel := ctx.WithTimeout(ctx.Background(), time.Second*requestTimeOutInSeconds)
+	defer cancel()
+
+	request, err := nethttp.NewRequestWithContext(context, requestInfo.Method.String(), uri.String(), nil)
 	if err != nil {
 		return nil, err
 	}
