@@ -91,6 +91,9 @@ func (a *NetHttpRequestAdapter) GetBaseUrl() string {
 }
 
 func (a *NetHttpRequestAdapter) getHttpResponseMessage(ctx context.Context, requestInfo *abs.RequestInformation, claims string) (*nethttp.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	a.setBaseUrlForRequestInformation(requestInfo)
 	additionalContext := make(map[string]interface{})
 	if claims != "" {
@@ -160,15 +163,10 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		return nil, err
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	// add deadline of not set
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
-		ctxTimed, cancel := context.WithTimeout(ctx, time.Second*requestTimeOutInSeconds)
+		ctxTimed, _ := context.WithTimeout(ctx, time.Second*requestTimeOutInSeconds)
 		ctx = ctxTimed
-		defer cancel()
 	}
 
 	request, err := nethttp.NewRequestWithContext(ctx, requestInfo.Method.String(), uri.String(), nil)
