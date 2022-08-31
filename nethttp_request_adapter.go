@@ -163,7 +163,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		return nil, err
 	}
 
-	// add deadline of not set
+	// set deadline if not set in receiving context
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
 		ctxTimed, _ := context.WithTimeout(ctx, time.Second*requestTimeOutInSeconds)
 		ctx = ctxTimed
