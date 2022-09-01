@@ -39,7 +39,7 @@ func TestItRetriesOnCAEResponse(t *testing.T) {
 	request.SetUri(*uri)
 	request.Method = abs.GET
 
-	err2 := adapter.SendNoContentAsync(context.TODO(), request, nil, nil)
+	err2 := adapter.SendNoContentAsync(context.TODO(), request, nil)
 	assert.Nil(t, err2)
 	assert.Equal(t, 2, methodCallCount)
 }
@@ -70,7 +70,7 @@ func TestItDoesntFailOnEmptyContentType(t *testing.T) {
 	request.SetUri(*uri)
 	request.Method = abs.GET
 
-	res, err := adapter.SendAsync(context.Background(), request, nil, nil, nil)
+	res, err := adapter.SendAsync(context.Background(), request, nil, nil)
 	assert.Nil(t, err)
 	assert.Nil(t, res)
 }

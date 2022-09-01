@@ -192,7 +192,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 }
 
 // SendAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model.
-func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) (absser.Parsable, error) {
+func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, errorMappings abs.ErrorMappings) (absser.Parsable, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -200,8 +200,8 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 	if err != nil {
 		return nil, err
 	}
-	if responseHandler != nil {
-		result, err := responseHandler(response, errorMappings)
+	if requestInfo.ResponseHandler != nil {
+		result, err := requestInfo.ResponseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +230,7 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 }
 
 // SendEnumAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model.
-func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) (interface{}, error) {
+func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, errorMappings abs.ErrorMappings) (interface{}, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -238,8 +238,8 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 	if err != nil {
 		return nil, err
 	}
-	if responseHandler != nil {
-		result, err := responseHandler(response, errorMappings)
+	if requestInfo.ResponseHandler != nil {
+		result, err := requestInfo.ResponseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -268,7 +268,7 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 }
 
 // SendCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
-func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) ([]absser.Parsable, error) {
+func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, errorMappings abs.ErrorMappings) ([]absser.Parsable, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -276,8 +276,8 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 	if err != nil {
 		return nil, err
 	}
-	if responseHandler != nil {
-		result, err := responseHandler(response, errorMappings)
+	if requestInfo.ResponseHandler != nil {
+		result, err := requestInfo.ResponseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -306,7 +306,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 }
 
 // SendEnumCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
-func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) ([]interface{}, error) {
+func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, errorMappings abs.ErrorMappings) ([]interface{}, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -314,8 +314,8 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 	if err != nil {
 		return nil, err
 	}
-	if responseHandler != nil {
-		result, err := responseHandler(response, errorMappings)
+	if requestInfo.ResponseHandler != nil {
+		result, err := requestInfo.ResponseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -344,7 +344,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 }
 
 // SendPrimitiveAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model.
-func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) (interface{}, error) {
+func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, errorMappings abs.ErrorMappings) (interface{}, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -352,8 +352,8 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 	if err != nil {
 		return nil, err
 	}
-	if responseHandler != nil {
-		result, err := responseHandler(response, errorMappings)
+	if requestInfo.ResponseHandler != nil {
+		result, err := requestInfo.ResponseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -403,7 +403,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 }
 
 // SendPrimitiveCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model collection.
-func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) ([]interface{}, error) {
+func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, errorMappings abs.ErrorMappings) ([]interface{}, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -411,8 +411,8 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	if responseHandler != nil {
-		result, err := responseHandler(response, errorMappings)
+	if requestInfo.ResponseHandler != nil {
+		result, err := requestInfo.ResponseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -440,7 +440,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 }
 
 // SendNoContentAsync executes the HTTP request specified by the given RequestInformation with no return content.
-func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestInfo *abs.RequestInformation, responseHandler abs.ResponseHandler, errorMappings abs.ErrorMappings) error {
+func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestInfo *abs.RequestInformation, errorMappings abs.ErrorMappings) error {
 	if requestInfo == nil {
 		return errors.New("requestInfo cannot be nil")
 	}
@@ -448,8 +448,8 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestI
 	if err != nil {
 		return err
 	}
-	if responseHandler != nil {
-		_, err := responseHandler(response, errorMappings)
+	if requestInfo.ResponseHandler != nil {
+		_, err := requestInfo.ResponseHandler(response, errorMappings)
 		return err
 	} else if response != nil {
 		defer a.purge(response)
