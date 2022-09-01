@@ -13,11 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0] - 2022-08-24
 
-- Adds context param in send async methods
-
 ### Added
 
-- Adds a chaos handler optional middleware for tests
+- Adds context param in send async methods
 
 ## [0.6.2] - 2022-08-30
 
