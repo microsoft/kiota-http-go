@@ -200,8 +200,10 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 	if err != nil {
 		return nil, err
 	}
-	if requestInfo.ResponseHandler != nil {
-		result, err := requestInfo.ResponseHandler(response, errorMappings)
+
+	responseHandler := getResponseHandler(ctx)
+	if responseHandler != nil {
+		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -238,8 +240,10 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 	if err != nil {
 		return nil, err
 	}
-	if requestInfo.ResponseHandler != nil {
-		result, err := requestInfo.ResponseHandler(response, errorMappings)
+
+	responseHandler := getResponseHandler(ctx)
+	if responseHandler != nil {
+		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -276,8 +280,10 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 	if err != nil {
 		return nil, err
 	}
-	if requestInfo.ResponseHandler != nil {
-		result, err := requestInfo.ResponseHandler(response, errorMappings)
+
+	responseHandler := getResponseHandler(ctx)
+	if responseHandler != nil {
+		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -314,8 +320,10 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 	if err != nil {
 		return nil, err
 	}
-	if requestInfo.ResponseHandler != nil {
-		result, err := requestInfo.ResponseHandler(response, errorMappings)
+
+	responseHandler := getResponseHandler(ctx)
+	if responseHandler != nil {
+		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -343,6 +351,14 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 	}
 }
 
+func getResponseHandler(ctx context.Context) abs.ResponseHandler {
+	var optionKey = ctx.Value(abs.ResponseHandlerOptionKey)
+	if optionKey != nil {
+		return ctx.Value(abs.ResponseHandlerOptionKey).(abs.RequestHandlerOption).GetResponseHandler()
+	}
+	return nil
+}
+
 // SendPrimitiveAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model.
 func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, errorMappings abs.ErrorMappings) (interface{}, error) {
 	if requestInfo == nil {
@@ -352,8 +368,10 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 	if err != nil {
 		return nil, err
 	}
-	if requestInfo.ResponseHandler != nil {
-		result, err := requestInfo.ResponseHandler(response, errorMappings)
+
+	responseHandler := getResponseHandler(ctx)
+	if responseHandler != nil {
+		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -411,8 +429,10 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	if requestInfo.ResponseHandler != nil {
-		result, err := requestInfo.ResponseHandler(response, errorMappings)
+
+	responseHandler := getResponseHandler(ctx)
+	if responseHandler != nil {
+		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -448,8 +468,10 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestI
 	if err != nil {
 		return err
 	}
-	if requestInfo.ResponseHandler != nil {
-		_, err := requestInfo.ResponseHandler(response, errorMappings)
+
+	responseHandler := getResponseHandler(ctx)
+	if responseHandler != nil {
+		_, err := responseHandler(response, errorMappings)
 		return err
 	} else if response != nil {
 		defer a.purge(response)
