@@ -22,3 +22,6 @@ jobs:
       - name: Build SDK project
         run: go build
         working-directory: ${{ env.relativePath }}
+      - name: Test project
+        run: go test
+        working-directory: ${{ env.relativePath }}
