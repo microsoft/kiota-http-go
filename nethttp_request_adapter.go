@@ -386,7 +386,13 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 			return nil, err
 		}
 		if typeName == "[]byte" {
-			return ioutil.ReadAll(response.Body)
+			res, err := ioutil.ReadAll(response.Body)
+			if err != nil {
+				return nil, err
+			} else if len(res) == 0 {
+				return nil, nil
+			}
+			return res, nil
 		}
 		parseNode, err := a.getRootParseNode(response)
 		if err != nil {

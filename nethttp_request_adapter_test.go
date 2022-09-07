@@ -9,6 +9,7 @@ import (
 
 	abs "github.com/microsoft/kiota-abstractions-go"
 	absauth "github.com/microsoft/kiota-abstractions-go/authentication"
+	"github.com/microsoft/kiota-http-go/internal"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -73,4 +74,140 @@ func TestItDoesntFailOnEmptyContentType(t *testing.T) {
 	res, err := adapter.SendAsync(context.Background(), request, nil, nil)
 	assert.Nil(t, err)
 	assert.Nil(t, res)
+}
+
+func TestItReturnsUsableStreamOnStream(t *testing.T) {
+	statusCodes := []int{200, 201, 202, 203, 206}
+
+	for i := 0; i < len(statusCodes); i++ {
+
+		testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+			res.WriteHeader(statusCodes[i])
+			res.Write([]byte("test"))
+		}))
+		defer func() { testServer.Close() }()
+		authProvider := &absauth.AnonymousAuthenticationProvider{}
+		adapter, err := NewNetHttpRequestAdapter(authProvider)
+		assert.Nil(t, err)
+		assert.NotNil(t, adapter)
+
+		uri, err := url.Parse(testServer.URL)
+		assert.Nil(t, err)
+		assert.NotNil(t, uri)
+		request := abs.NewRequestInformation()
+		request.SetUri(*uri)
+		request.Method = abs.GET
+
+		res, err2 := adapter.SendPrimitiveAsync(context.TODO(), request, "[]byte", nil)
+		assert.Nil(t, err2)
+		assert.NotNil(t, res)
+		assert.Equal(t, 4, len(res.([]byte)))
+	}
+}
+
+func TestItReturnsNilOnStream(t *testing.T) {
+	statusCodes := []int{200, 201, 202, 203, 204}
+
+	for i := 0; i < len(statusCodes); i++ {
+
+		testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+			res.WriteHeader(statusCodes[i])
+		}))
+		defer func() { testServer.Close() }()
+		authProvider := &absauth.AnonymousAuthenticationProvider{}
+		adapter, err := NewNetHttpRequestAdapter(authProvider)
+		assert.Nil(t, err)
+		assert.NotNil(t, adapter)
+
+		uri, err := url.Parse(testServer.URL)
+		assert.Nil(t, err)
+		assert.NotNil(t, uri)
+		request := abs.NewRequestInformation()
+		request.SetUri(*uri)
+		request.Method = abs.GET
+
+		res, err2 := adapter.SendPrimitiveAsync(context.TODO(), request, "[]byte", nil)
+		assert.Nil(t, err2)
+		assert.Nil(t, res)
+	}
+}
+
+func TestSendNoContentDoesntFailOnOtherCodes(t *testing.T) {
+	statusCodes := []int{200, 201, 202, 203, 204, 206}
+
+	for i := 0; i < len(statusCodes); i++ {
+
+		testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+			res.WriteHeader(statusCodes[i])
+		}))
+		defer func() { testServer.Close() }()
+		authProvider := &absauth.AnonymousAuthenticationProvider{}
+		adapter, err := NewNetHttpRequestAdapter(authProvider)
+		assert.Nil(t, err)
+		assert.NotNil(t, adapter)
+
+		uri, err := url.Parse(testServer.URL)
+		assert.Nil(t, err)
+		assert.NotNil(t, uri)
+		request := abs.NewRequestInformation()
+		request.SetUri(*uri)
+		request.Method = abs.GET
+
+		err2 := adapter.SendNoContentAsync(context.TODO(), request, nil)
+		assert.Nil(t, err2)
+	}
+}
+
+func TestSendReturnNilOnNoContent(t *testing.T) {
+	statusCodes := []int{200, 201, 202, 203, 204, 205}
+
+	for i := 0; i < len(statusCodes); i++ {
+
+		testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+			res.WriteHeader(statusCodes[i])
+		}))
+		defer func() { testServer.Close() }()
+		authProvider := &absauth.AnonymousAuthenticationProvider{}
+		adapter, err := NewNetHttpRequestAdapter(authProvider)
+		assert.Nil(t, err)
+		assert.NotNil(t, adapter)
+
+		uri, err := url.Parse(testServer.URL)
+		assert.Nil(t, err)
+		assert.NotNil(t, uri)
+		request := abs.NewRequestInformation()
+		request.SetUri(*uri)
+		request.Method = abs.GET
+
+		res, err2 := adapter.SendAsync(context.TODO(), request, internal.MockEntityFactory, nil)
+		assert.Nil(t, err2)
+		assert.Nil(t, res)
+	}
+}
+
+func TestSendReturnsObjectOnContent(t *testing.T) {
+	statusCodes := []int{200, 201, 202, 203, 204, 205}
+
+	for i := 0; i < len(statusCodes); i++ {
+
+		testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+			res.WriteHeader(statusCodes[i])
+		}))
+		defer func() { testServer.Close() }()
+		authProvider := &absauth.AnonymousAuthenticationProvider{}
+		adapter, err := NewNetHttpRequestAdapterWithParseNodeFactory(authProvider, &internal.MockParseNodeFactory{})
+		assert.Nil(t, err)
+		assert.NotNil(t, adapter)
+
+		uri, err := url.Parse(testServer.URL)
+		assert.Nil(t, err)
+		assert.NotNil(t, uri)
+		request := abs.NewRequestInformation()
+		request.SetUri(*uri)
+		request.Method = abs.GET
+
+		res, err2 := adapter.SendAsync(context.TODO(), request, internal.MockEntityFactory, nil)
+		assert.Nil(t, err2)
+		assert.Nil(t, res)
+	}
 }
