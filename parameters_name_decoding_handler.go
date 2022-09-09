@@ -69,9 +69,10 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 		reqOption = &handler.options
 	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)
+	ctx := req.Context()
 	var span trace.Span
 	if obsOptions != nil {
-		_, span = otel.Tracer(obsOptions.GetObservabilityName()).Start(req.Context(), "ParametersNameDecodingHandler_Intercept")
+		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetObservabilityName()).Start(ctx, "ParametersNameDecodingHandler_Intercept")
 		span.SetAttributes(attribute.Bool("ParametersNameDecodingHandler.Enable", reqOption.GetEnable()))
 	}
 	if reqOption.GetEnable() &&
