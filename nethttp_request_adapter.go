@@ -4,15 +4,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	abs "github.com/microsoft/kiota-abstractions-go"
-	absauth "github.com/microsoft/kiota-abstractions-go/authentication"
-	absser "github.com/microsoft/kiota-abstractions-go/serialization"
 	"io/ioutil"
 	nethttp "net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	abs "github.com/microsoft/kiota-abstractions-go"
+	absauth "github.com/microsoft/kiota-abstractions-go/authentication"
+	absser "github.com/microsoft/kiota-abstractions-go/serialization"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // NetHttpRequestAdapter implements the RequestAdapter interface using net/http
@@ -27,6 +31,8 @@ type NetHttpRequestAdapter struct {
 	authenticationProvider absauth.AuthenticationProvider
 	// The base url for every request.
 	baseUrl string
+	// The observation name for the request adapter.
+	observabilityName string
 }
 
 // NewNetHttpRequestAdapter creates a new NetHttpRequestAdapter with the given parameters
@@ -46,6 +52,16 @@ func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactory(a
 
 // NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClient creates a new NetHttpRequestAdapter with the given parameters
 func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClient(authenticationProvider absauth.AuthenticationProvider, parseNodeFactory absser.ParseNodeFactory, serializationWriterFactory absser.SerializationWriterFactory, httpClient *nethttp.Client) (*NetHttpRequestAdapter, error) {
+	return NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityName(authenticationProvider, parseNodeFactory, serializationWriterFactory, httpClient, "")
+}
+
+var DefaultObservationName = "kiota-http-go"
+
+// NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityName creates a new NetHttpRequestAdapter with the given parameters
+func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityName(authenticationProvider absauth.AuthenticationProvider, parseNodeFactory absser.ParseNodeFactory, serializationWriterFactory absser.SerializationWriterFactory, httpClient *nethttp.Client, observabilityName string) (*NetHttpRequestAdapter, error) {
+	if observabilityName == "" {
+		observabilityName = DefaultObservationName
+	}
 	if authenticationProvider == nil {
 		return nil, errors.New("authenticationProvider cannot be nil")
 	}
@@ -55,6 +71,7 @@ func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAn
 		httpClient:                 httpClient,
 		authenticationProvider:     authenticationProvider,
 		baseUrl:                    "",
+		observabilityName:          observabilityName,
 	}
 	if result.httpClient == nil {
 		defaultClient := GetDefaultClient()
@@ -90,6 +107,8 @@ func (a *NetHttpRequestAdapter) GetBaseUrl() string {
 }
 
 func (a *NetHttpRequestAdapter) getHttpResponseMessage(ctx context.Context, requestInfo *abs.RequestInformation, claims string) (*nethttp.Response, error) {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "getHttpResponseMessage")
+	defer span.End()
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -110,6 +129,17 @@ func (a *NetHttpRequestAdapter) getHttpResponseMessage(ctx context.Context, requ
 	if err != nil {
 		return nil, err
 	}
+	if response != nil {
+		contentLenHeader := response.Header.Get("Content-Length")
+		if contentLenHeader != "" {
+			contentLen, _ := strconv.Atoi(contentLenHeader)
+			span.SetAttributes(attribute.Int("http.response_content_length", contentLen))
+		}
+		span.SetAttributes(
+			attribute.Int("http.status_code", response.StatusCode),
+			attribute.String("http.flavor", response.Proto),
+		)
+	}
 	return a.retryCAEResponseIfRequired(ctx, response, requestInfo, claims)
 }
 
@@ -119,10 +149,14 @@ var reBearer = regexp.MustCompile(`(?i)^Bearer\s`)
 var reClaims = regexp.MustCompile(`\"([^\"]*)\"`)
 
 func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, response *nethttp.Response, requestInfo *abs.RequestInformation, claims string) (*nethttp.Response, error) {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "retryCAEResponseIfRequired")
+	defer span.End()
 	if response.StatusCode == 401 &&
 		claims == "" { //avoid infinite loop, we only retry once
 		authenticateHeaderVal := response.Header.Get("WWW-Authenticate")
 		if authenticateHeaderVal != "" && reBearer.Match([]byte(authenticateHeaderVal)) {
+			span.AddEvent("authenticate_challenge_received")
+			span.SetAttributes(attribute.Int("http.retry_count", 1))
 			responseClaims := ""
 			parametersRaw := string(reBearer.ReplaceAll([]byte(authenticateHeaderVal), []byte("")))
 			parameters := strings.Split(parametersRaw, ",")
@@ -160,24 +194,33 @@ func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
 	// set deadline if not set in receiving context
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
-		ctxTimed, _ := context.WithTimeout(ctx, time.Second*requestTimeOutInSeconds)
-		ctx = ctxTimed
+		ctx, _ = context.WithTimeout(ctx, time.Second*requestTimeOutInSeconds)
 	}
 
 	for _, value := range requestInfo.GetRequestOptions() {
 		ctx = context.WithValue(ctx, value.GetKey(), value)
 	}
+	ctx = context.WithValue(ctx, observabilityOptionsKeyValue, &ObservabilityOptions{
+		observabilityName: a.observabilityName,
+	})
 	return ctx
 }
-
 func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Context, requestInfo *abs.RequestInformation) (*nethttp.Request, error) {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "getRequestFromRequestInformation")
+	defer span.End()
+	span.SetAttributes(attribute.String("http.method", requestInfo.Method.String()))
 	uri, err := requestInfo.GetUri()
 	if err != nil {
 		return nil, err
 	}
+	span.SetAttributes(
+		attribute.String("http.uri", uri.String()),
+		attribute.String("http.scheme", uri.Scheme),
+		attribute.String("http.host", uri.Host),
+		attribute.Int("http.request_content_length", len(requestInfo.Content)),
+	)
 
 	request, err := nethttp.NewRequestWithContext(ctx, requestInfo.Method.String(), uri.String(), nil)
 
@@ -196,12 +239,15 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 			request.Header.Set(key, value)
 		}
 	}
-
 	return request, nil
 }
 
+var event_response_handler = "response_handler_invoked"
+
 // SendAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model.
 func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, errorMappings abs.ErrorMappings) (absser.Parsable, error) {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "SendAsync")
+	defer span.End()
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -213,6 +259,7 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 
 	responseHandler := getResponseHandler(ctx)
 	if responseHandler != nil {
+		span.AddEvent(event_response_handler)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
@@ -220,7 +267,7 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 		return result.(absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(response, errorMappings)
+		err = a.throwFailedResponses(ctx, response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -243,6 +290,8 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 
 // SendEnumAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model.
 func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, errorMappings abs.ErrorMappings) (interface{}, error) {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "SendEnumAsync")
+	defer span.End()
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -254,6 +303,7 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 
 	responseHandler := getResponseHandler(ctx)
 	if responseHandler != nil {
+		span.AddEvent(event_response_handler)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
@@ -261,7 +311,7 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 		return result.(absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(response, errorMappings)
+		err = a.throwFailedResponses(ctx, response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -284,6 +334,8 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 
 // SendCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
 func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, errorMappings abs.ErrorMappings) ([]absser.Parsable, error) {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "SendCollectionAsync")
+	defer span.End()
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -295,6 +347,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 
 	responseHandler := getResponseHandler(ctx)
 	if responseHandler != nil {
+		span.AddEvent(event_response_handler)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
@@ -302,7 +355,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 		return result.([]absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(response, errorMappings)
+		err = a.throwFailedResponses(ctx, response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -325,6 +378,8 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 
 // SendEnumCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
 func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, errorMappings abs.ErrorMappings) ([]interface{}, error) {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "SendEnumCollectionAsync")
+	defer span.End()
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -336,6 +391,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 
 	responseHandler := getResponseHandler(ctx)
 	if responseHandler != nil {
+		span.AddEvent(event_response_handler)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
@@ -343,7 +399,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 		return result.([]interface{}), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(response, errorMappings)
+		err = a.throwFailedResponses(ctx, response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -374,6 +430,8 @@ func getResponseHandler(ctx context.Context) abs.ResponseHandler {
 
 // SendPrimitiveAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model.
 func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, errorMappings abs.ErrorMappings) (interface{}, error) {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "SendPrimitiveAsync")
+	defer span.End()
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -385,6 +443,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 
 	responseHandler := getResponseHandler(ctx)
 	if responseHandler != nil {
+		span.AddEvent(event_response_handler)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
@@ -392,7 +451,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 		return result.(absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(response, errorMappings)
+		err = a.throwFailedResponses(ctx, response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -442,6 +501,8 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 
 // SendPrimitiveCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model collection.
 func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, errorMappings abs.ErrorMappings) ([]interface{}, error) {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "SendPrimitiveCollectionAsync")
+	defer span.End()
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
@@ -453,6 +514,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 
 	responseHandler := getResponseHandler(ctx)
 	if responseHandler != nil {
+		span.AddEvent(event_response_handler)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
 			return nil, err
@@ -460,7 +522,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 		return result.([]interface{}), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(response, errorMappings)
+		err = a.throwFailedResponses(ctx, response, errorMappings)
 		if err != nil {
 			return nil, err
 		}
@@ -482,6 +544,8 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 
 // SendNoContentAsync executes the HTTP request specified by the given RequestInformation with no return content.
 func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestInfo *abs.RequestInformation, errorMappings abs.ErrorMappings) error {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "SendNoContentAsync")
+	defer span.End()
 	if requestInfo == nil {
 		return errors.New("requestInfo cannot be nil")
 	}
@@ -493,11 +557,12 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestI
 
 	responseHandler := getResponseHandler(ctx)
 	if responseHandler != nil {
+		span.AddEvent(event_response_handler)
 		_, err := responseHandler(response, errorMappings)
 		return err
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(response, errorMappings)
+		err = a.throwFailedResponses(ctx, response, errorMappings)
 		if err != nil {
 			return err
 		}
@@ -530,10 +595,16 @@ func (a *NetHttpRequestAdapter) shouldReturnNil(response *nethttp.Response) bool
 	return response.StatusCode == 204
 }
 
-func (a *NetHttpRequestAdapter) throwFailedResponses(response *nethttp.Response, errorMappings abs.ErrorMappings) error {
+var ErrorMappingFoundAttributeName = "error_mapping_found"
+var ErrorBodyFoundAttributeName = "error_body_found"
+
+func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, response *nethttp.Response, errorMappings abs.ErrorMappings) error {
+	_, span := otel.Tracer(a.observabilityName).Start(ctx, "throwFailedResponses")
+	defer span.End()
 	if response.StatusCode < 400 {
 		return nil
 	}
+	span.SetStatus(codes.Error, "received_error_response")
 
 	statusAsString := strconv.Itoa(response.StatusCode)
 	var errorCtor absser.ParsableFactory = nil
@@ -548,24 +619,32 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(response *nethttp.Response,
 	}
 
 	if errorCtor == nil {
+		span.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, false))
 		return &abs.ApiError{
 			Message: "The server returned an unexpected status code and no error factory is registered for this code: " + statusAsString,
 		}
 	}
+	span.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, true))
 
 	rootNode, err := a.getRootParseNode(response)
 	if err != nil {
 		return err
 	}
 	if rootNode == nil {
+		span.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, false))
 		return &abs.ApiError{
 			Message: "The server returned an unexpected status code with no response body: " + statusAsString,
 		}
 	}
+	span.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, true))
 
 	errValue, err := rootNode.GetObjectValue(errorCtor)
 	if err != nil {
 		return err
+	} else if errValue == nil {
+		return &abs.ApiError{
+			Message: "The server returned an unexpected status code but the error could not be deserialized: " + statusAsString,
+		}
 	}
 
 	return errValue.(error)

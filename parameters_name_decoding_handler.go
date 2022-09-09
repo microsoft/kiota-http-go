@@ -6,6 +6,9 @@ import (
 	"strings"
 
 	abs "github.com/microsoft/kiota-abstractions-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ParametersNameDecodingOptions defines the options for the ParametersNameDecodingHandler
@@ -65,6 +68,12 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 	if !ok {
 		reqOption = &handler.options
 	}
+	obsOptions := GetObservabilityOptionsFromRequest(req)
+	var span trace.Span
+	if obsOptions != nil {
+		_, span = otel.Tracer(obsOptions.GetObservabilityName()).Start(req.Context(), "ParametersNameDecodingHandler_Intercept")
+		span.SetAttributes(attribute.Bool("ParametersNameDecodingHandler.Enable", reqOption.GetEnable()))
+	}
 	if reqOption.GetEnable() &&
 		len(reqOption.GetParametersToDecode()) != 0 &&
 		strings.Contains(req.URL.RawQuery, "%") {
@@ -73,6 +82,9 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 			replacementValue := string(parameter)
 			req.URL.RawQuery = strings.ReplaceAll(strings.ReplaceAll(req.URL.RawQuery, strings.ToUpper(valueToReplace), replacementValue), strings.ToLower(valueToReplace), replacementValue)
 		}
+	}
+	if span != nil {
+		span.End()
 	}
 	return pipeline.Next(req, middlewareIndex)
 }
