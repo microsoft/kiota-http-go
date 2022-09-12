@@ -148,6 +148,7 @@ const claimsKey = "claims"
 
 var reBearer = regexp.MustCompile(`(?i)^Bearer\s`)
 var reClaims = regexp.MustCompile(`\"([^\"]*)\"`)
+var AuthenticateChallengedEventKey = "authenticate_challenge_received"
 
 func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, response *nethttp.Response, requestInfo *abs.RequestInformation, claims string, spanForAttributes trace.Span) (*nethttp.Response, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "retryCAEResponseIfRequired")
@@ -156,7 +157,7 @@ func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, 
 		claims == "" { //avoid infinite loop, we only retry once
 		authenticateHeaderVal := response.Header.Get("WWW-Authenticate")
 		if authenticateHeaderVal != "" && reBearer.Match([]byte(authenticateHeaderVal)) {
-			span.AddEvent("authenticate_challenge_received")
+			span.AddEvent(AuthenticateChallengedEventKey)
 			spanForAttributes.SetAttributes(attribute.Int("http.retry_count", 1))
 			responseClaims := ""
 			parametersRaw := string(reBearer.ReplaceAll([]byte(authenticateHeaderVal), []byte("")))
@@ -245,6 +246,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 			)
 		}
 	}
+
 	return request, nil
 }
 

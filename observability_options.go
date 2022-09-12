@@ -22,6 +22,10 @@ type ObservabilityOptionsInt interface {
 	GetObservabilityName() string
 }
 
+func (*ObservabilityOptions) GetKey() abs.RequestOptionKey {
+	return observabilityOptionsKeyValue
+}
+
 var observabilityOptionsKeyValue = abs.RequestOptionKey{
 	Key: "ObservabilityOptions",
 }
