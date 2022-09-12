@@ -73,7 +73,9 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 	var span trace.Span
 	if obsOptions != nil {
 		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetObservabilityName()).Start(ctx, "ParametersNameDecodingHandler_Intercept")
-		span.SetAttributes(attribute.Bool("ParametersNameDecodingHandler.Enable", reqOption.GetEnable()))
+		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.parameters_name_decoding.enable", reqOption.GetEnable()))
+		req = req.WithContext(ctx)
+		defer span.End()
 	}
 	if reqOption.GetEnable() &&
 		len(reqOption.GetParametersToDecode()) != 0 &&
@@ -83,9 +85,6 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 			replacementValue := string(parameter)
 			req.URL.RawQuery = strings.ReplaceAll(strings.ReplaceAll(req.URL.RawQuery, strings.ToUpper(valueToReplace), replacementValue), strings.ToLower(valueToReplace), replacementValue)
 		}
-	}
-	if span != nil {
-		span.End()
 	}
 	return pipeline.Next(req, middlewareIndex)
 }

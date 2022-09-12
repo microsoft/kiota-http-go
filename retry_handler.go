@@ -1,12 +1,17 @@
 package nethttplibrary
 
 import (
+	"context"
+	"fmt"
 	"math"
 	nethttp "net/http"
 	"strconv"
 	"time"
 
 	abs "github.com/microsoft/kiota-abstractions-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RetryHandler handles transient HTTP responses and retries the request given the retry options
@@ -96,6 +101,17 @@ const gatewayTimeout = 504
 
 // Intercept implements the interface and evaluates whether to retry a failed request.
 func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	obsOptions := GetObservabilityOptionsFromRequest(req)
+	ctx := req.Context()
+	var span trace.Span
+	var observabilityName string
+	if obsOptions != nil {
+		observabilityName = obsOptions.GetObservabilityName()
+		ctx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RetryHandler_Intercept")
+		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.retry.enable", true))
+		defer span.End()
+		req = req.WithContext(ctx)
+	}
 	response, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
 		return response, err
@@ -104,25 +120,33 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 	if !ok {
 		reqOption = &middleware.options
 	}
-	return middleware.retryRequest(pipeline, middlewareIndex, reqOption, req, response, 0, 0)
+	return middleware.retryRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, 0, observabilityName)
 }
 
-func (middleware RetryHandler) retryRequest(pipeline Pipeline, middlewareIndex int, options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response, executionCount int, cummulativeDelay time.Duration) (*nethttp.Response, error) {
+func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeline, middlewareIndex int, options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response, executionCount int, cumulativeDelay time.Duration, observabilityName string) (*nethttp.Response, error) {
 	if middleware.isRetriableErrorCode(resp.StatusCode) &&
 		middleware.isRetriableRequest(req) &&
 		executionCount < options.GetMaxRetries() &&
-		cummulativeDelay < time.Duration(absoluteMaxDelaySeconds)*time.Second &&
-		options.GetShouldRetry()(cummulativeDelay, executionCount, req, resp) {
+		cumulativeDelay < time.Duration(absoluteMaxDelaySeconds)*time.Second &&
+		options.GetShouldRetry()(cumulativeDelay, executionCount, req, resp) {
 		executionCount++
 		delay := middleware.getRetryDelay(req, resp, options, executionCount)
-		cummulativeDelay += delay
+		cumulativeDelay += delay
 		req.Header.Set(retryAttemptHeader, strconv.Itoa(executionCount))
+		if observabilityName != "" {
+			ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RetryHandler_Intercept - attempt "+fmt.Sprint(executionCount))
+			span.SetAttributes(attribute.Int("http.retry_count", executionCount),
+				attribute.Int("http.status_code", resp.StatusCode),
+			)
+			defer span.End()
+			req = req.WithContext(ctx)
+		}
 		time.Sleep(delay)
 		response, err := pipeline.Next(req, middlewareIndex)
 		if err != nil {
 			return response, err
 		}
-		return middleware.retryRequest(pipeline, middlewareIndex, options, req, response, executionCount, cummulativeDelay)
+		return middleware.retryRequest(ctx, pipeline, middlewareIndex, options, req, response, executionCount, cumulativeDelay, observabilityName)
 	}
 	return resp, nil
 }

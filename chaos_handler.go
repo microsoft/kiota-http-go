@@ -2,12 +2,16 @@ package nethttplibrary
 
 import (
 	"errors"
-	abstractions "github.com/microsoft/kiota-abstractions-go"
 	"io"
 	"math/rand"
 	nethttp "net/http"
 	"regexp"
 	"strings"
+
+	abstractions "github.com/microsoft/kiota-abstractions-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type ChaosStrategy int
@@ -271,13 +275,28 @@ func createChaosResponse(handler chaosHandlerOptionsInt, req *nethttp.Request) (
 	return responseBody, nil
 }
 
+var ChaosHandlerTriggeredEventKey = "chaos_handler_triggered"
+
 func (middleware ChaosHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
 	reqOption, ok := req.Context().Value(chaosHandlerKey).(chaosHandlerOptionsInt)
 	if !ok {
 		reqOption = middleware.options
 	}
 
+	obsOptions := GetObservabilityOptionsFromRequest(req)
+	ctx := req.Context()
+	var span trace.Span
+	if obsOptions != nil {
+		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetObservabilityName()).Start(ctx, "ChaosHandler_Intercept")
+		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.chaos.enable", true))
+		req = req.WithContext(ctx)
+		defer span.End()
+	}
+
 	if rand.Intn(100) < reqOption.GetChaosPercentage() {
+		if span != nil {
+			span.AddEvent(ChaosHandlerTriggeredEventKey)
+		}
 		return createChaosResponse(reqOption, req)
 	}
 

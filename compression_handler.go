@@ -8,6 +8,9 @@ import (
 	"net/http"
 
 	abstractions "github.com/microsoft/kiota-abstractions-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // CompressionHandler represents a compression middleware
@@ -62,8 +65,21 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		reqOption = c.options
 	}
 
+	obsOptions := GetObservabilityOptionsFromRequest(req)
+	ctx := req.Context()
+	var span trace.Span
+	if obsOptions != nil {
+		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetObservabilityName()).Start(ctx, "CompressionHandler_Intercept")
+		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.compression.enable", true))
+		defer span.End()
+		req = req.WithContext(ctx)
+	}
+
 	if !reqOption.ShouldCompress() || req.Body == nil {
 		return pipeline.Next(req, middlewareIndex)
+	}
+	if span != nil {
+		span.SetAttributes(attribute.Bool("http.request_body_compressed", true))
 	}
 
 	unCompressedBody, err := ioutil.ReadAll(req.Body)
@@ -81,6 +97,10 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	req.Body = compressedBody
 	req.ContentLength = int64(size)
 
+	if span != nil {
+		span.SetAttributes(attribute.Int64("http.request_content_length", req.ContentLength))
+	}
+
 	// Sending request with compressed body
 	resp, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
@@ -92,6 +112,11 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		delete(req.Header, "Content-Encoding")
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(unCompressedBody))
 		req.ContentLength = unCompressedContentLength
+
+		if span != nil {
+			span.SetAttributes(attribute.Int64("http.request_content_length", req.ContentLength),
+				attribute.Int("http.request_content_length", 415))
+		}
 
 		return pipeline.Next(req, middlewareIndex)
 	}
