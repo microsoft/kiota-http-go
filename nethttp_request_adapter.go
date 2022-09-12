@@ -239,6 +239,11 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		for key, value := range requestInfo.Headers {
 			request.Header.Set(key, value)
 		}
+		if requestInfo.Headers["Content-Type"] != "" { //TODO the map is case sensitive and should be normalized
+			spanForAttributes.SetAttributes(
+				attribute.String("http.request_content_type", requestInfo.Headers["Content-Type"]),
+			)
+		}
 	}
 	return request, nil
 }
@@ -283,13 +288,15 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 		if a.shouldReturnNil(response) {
 			return nil, err
 		}
-		parseNode, err := a.getRootParseNode(response)
+		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
 			return nil, err
 		}
 		if parseNode == nil {
 			return nil, nil
 		}
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetObjectValue")
+		defer deserializeSpan.End()
 		result, err := parseNode.GetObjectValue(constructor)
 		return result, err
 	} else {
@@ -327,13 +334,15 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 		if a.shouldReturnNil(response) {
 			return nil, err
 		}
-		parseNode, err := a.getRootParseNode(response)
+		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
 			return nil, err
 		}
 		if parseNode == nil {
 			return nil, nil
 		}
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetEnumValue")
+		defer deserializeSpan.End()
 		result, err := parseNode.GetEnumValue(parser)
 		return result, err
 	} else {
@@ -371,13 +380,15 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 		if a.shouldReturnNil(response) {
 			return nil, err
 		}
-		parseNode, err := a.getRootParseNode(response)
+		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
 			return nil, err
 		}
 		if parseNode == nil {
 			return nil, nil
 		}
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetCollectionOfObjectValues")
+		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfObjectValues(constructor)
 		return result, err
 	} else {
@@ -415,13 +426,15 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 		if a.shouldReturnNil(response) {
 			return nil, err
 		}
-		parseNode, err := a.getRootParseNode(response)
+		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
 			return nil, err
 		}
 		if parseNode == nil {
 			return nil, nil
 		}
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetCollectionOfEnumValues")
+		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfEnumValues(parser)
 		return result, err
 	} else {
@@ -476,13 +489,15 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 			}
 			return res, nil
 		}
-		parseNode, err := a.getRootParseNode(response)
+		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
 			return nil, err
 		}
 		if parseNode == nil {
 			return nil, nil
 		}
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "Get"+typeName+"Value")
+		defer deserializeSpan.End()
 		switch typeName {
 		case "string":
 			return parseNode.GetStringValue()
@@ -538,13 +553,15 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 		if a.shouldReturnNil(response) {
 			return nil, err
 		}
-		parseNode, err := a.getRootParseNode(response)
+		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
 			return nil, err
 		}
 		if parseNode == nil {
 			return nil, nil
 		}
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetCollectionOfPrimitiveValues")
+		defer deserializeSpan.End()
 		return parseNode.GetCollectionOfPrimitiveValues(typeName)
 	} else {
 		return nil, errors.New("response is nil")
@@ -581,16 +598,20 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestI
 	}
 }
 
-func (a *NetHttpRequestAdapter) getRootParseNode(response *nethttp.Response) (absser.ParseNode, error) {
+func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *nethttp.Response, spanForAttributes trace.Span) (absser.ParseNode, context.Context, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "getRootParseNode")
+	defer span.End()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, err
+		return nil, ctx, err
 	}
 	contentType := a.getResponsePrimaryContentType(response)
 	if contentType == "" {
-		return nil, nil
+		return nil, ctx, nil
 	}
-	return a.parseNodeFactory.GetRootParseNode(contentType, body)
+	spanForAttributes.SetAttributes(attribute.String("http.response_content_type", contentType))
+	rootNode, err := a.parseNodeFactory.GetRootParseNode(contentType, body)
+	return rootNode, ctx, err
 }
 func (a *NetHttpRequestAdapter) purge(response *nethttp.Response) error {
 	_, _ = ioutil.ReadAll(response.Body) //we don't care about errors comming from reading the body, just trying to purge anything that maybe left
@@ -635,7 +656,7 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, respon
 	}
 	spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, true))
 
-	rootNode, err := a.getRootParseNode(response)
+	rootNode, _, err := a.getRootParseNode(ctx, response, spanForAttributes)
 	if err != nil {
 		return err
 	}
@@ -647,6 +668,8 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, respon
 	}
 	spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, true))
 
+	_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetObjectValue")
+	defer deserializeSpan.End()
 	errValue, err := rootNode.GetObjectValue(errorCtor)
 	if err != nil {
 		return err
