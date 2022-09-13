@@ -22,7 +22,16 @@
 
 	// Add the IDs of extensions you want installed when the container is created.
 	"extensions": [
-		"golang.Go"
+		"golang.Go",
+		"EditorConfig.EditorConfig",
+		"GitHub.copilot",
+		"GitHub.vscode-pull-request-github",
+		"donjayamanne.githistory",
+		"waderyan.gitblame",
+		"streetsidesoftware.code-spell-checker",
+		"VisualStudioExptTeam.vscodeintellicode",
+		"ms-vsliveshare.vsliveshare",
+		"esbenp.prettier-vscode"
 	],
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
