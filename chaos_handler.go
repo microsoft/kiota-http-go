@@ -275,7 +275,7 @@ func createChaosResponse(handler chaosHandlerOptionsInt, req *nethttp.Request) (
 	return responseBody, nil
 }
 
-var ChaosHandlerTriggeredEventKey = "chaos_handler_triggered"
+const ChaosHandlerTriggeredEventKey = "chaos_handler_triggered"
 
 func (middleware ChaosHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
 	reqOption, ok := req.Context().Value(chaosHandlerKey).(chaosHandlerOptionsInt)

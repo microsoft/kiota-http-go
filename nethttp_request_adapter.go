@@ -150,7 +150,8 @@ const claimsKey = "claims"
 
 var reBearer = regexp.MustCompile(`(?i)^Bearer\s`)
 var reClaims = regexp.MustCompile(`\"([^\"]*)\"`)
-var AuthenticateChallengedEventKey = "authenticate_challenge_received"
+
+const AuthenticateChallengedEventKey = "authenticate_challenge_received"
 
 func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, response *nethttp.Response, requestInfo *abs.RequestInformation, claims string, spanForAttributes trace.Span) (*nethttp.Response, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "retryCAEResponseIfRequired")
@@ -256,7 +257,8 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 	return request, nil
 }
 
-var EventResponseHandlerInvokedKey = "response_handler_invoked"
+const EventResponseHandlerInvokedKey = "response_handler_invoked"
+
 var queryParametersCleanupRegex = regexp.MustCompile(`\{\?[^\}]+}`)
 
 func (a *NetHttpRequestAdapter) startTracingSpan(ctx context.Context, requestInfo *abs.RequestInformation, methodName string) (context.Context, trace.Span) {
@@ -681,8 +683,8 @@ func (a *NetHttpRequestAdapter) shouldReturnNil(response *nethttp.Response) bool
 	return response.StatusCode == 204
 }
 
-var ErrorMappingFoundAttributeName = "error_mapping_found"
-var ErrorBodyFoundAttributeName = "error_body_found"
+const ErrorMappingFoundAttributeName = "error_mapping_found"
+const ErrorBodyFoundAttributeName = "error_body_found"
 
 func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, response *nethttp.Response, errorMappings abs.ErrorMappings, spanForAttributes trace.Span) error {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "throwFailedResponses")
