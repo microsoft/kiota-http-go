@@ -211,6 +211,42 @@ func TestSendReturnsObjectOnContent(t *testing.T) {
 		assert.Nil(t, res)
 	}
 }
+<<<<<<< HEAD
+
+func TestResponseHandlerIsCalledWhenProvided(t *testing.T) {
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.WriteHeader(201)
+	}))
+	defer func() { testServer.Close() }()
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.Nil(t, err)
+	assert.NotNil(t, adapter)
+
+	uri, err := url.Parse(testServer.URL)
+	assert.Nil(t, err)
+	assert.NotNil(t, uri)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	count := 1
+	responseHandler := func(response interface{}, errorMappings abs.ErrorMappings) (interface{}, error) {
+		count = 2
+		return nil, nil
+	}
+
+	handlerOption := abs.NewRequestHandlerOption()
+	handlerOption.SetResponseHandler(responseHandler)
+
+	request.AddRequestOptions([]abs.RequestOption{handlerOption})
+
+	err = adapter.SendNoContentAsync(context.Background(), request, nil)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, count)
+}
+=======
+>>>>>>> 2489d46 (- aligns crlf to lf)
 
 func TestResponseHandlerIsCalledWhenProvided(t *testing.T) {
 	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
