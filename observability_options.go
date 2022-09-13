@@ -8,20 +8,13 @@ import (
 
 // ObservabilityOptions holds the tracing, metrics and logging configuration for the request adapter
 type ObservabilityOptions struct {
-	// The name of the tracer
-	TracerInstrumentationName string
 	// Whether to include attributes which could contains EUII information like URLs
 	IncludeEUIIAttibutes bool
 }
 
 // GetTracerInstrumentationName returns the observability name to use for the tracer
 func (o *ObservabilityOptions) GetTracerInstrumentationName() string {
-	return o.TracerInstrumentationName
-}
-
-// SetTracerInstrumentationName set the observability name to use for the tracer
-func (o *ObservabilityOptions) SetTracerInstrumentationName(value string) {
-	o.TracerInstrumentationName = value
+	return "github.com/microsoft/kiota-http-go"
 }
 
 // GetIncludeEUIIAttibutes returns whether to include attributes which could contains EUII information
@@ -38,7 +31,6 @@ func (o *ObservabilityOptions) SetIncludeEUIIAttibutes(value bool) {
 type ObservabilityOptionsInt interface {
 	abs.RequestOption
 	GetTracerInstrumentationName() string
-	SetTracerInstrumentationName(string)
 	GetIncludeEUIIAttibutes() bool
 	SetIncludeEUIIAttibutes(value bool)
 }
