@@ -80,11 +80,17 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 	if reqOption.GetEnable() &&
 		len(reqOption.GetParametersToDecode()) != 0 &&
 		strings.Contains(req.URL.RawQuery, "%") {
-		for _, parameter := range reqOption.GetParametersToDecode() {
-			valueToReplace := "%" + strconv.FormatInt(int64(parameter), 16)
-			replacementValue := string(parameter)
-			req.URL.RawQuery = strings.ReplaceAll(strings.ReplaceAll(req.URL.RawQuery, strings.ToUpper(valueToReplace), replacementValue), strings.ToLower(valueToReplace), replacementValue)
-		}
+		req.URL.RawQuery = decodeUriEncodedString(req.URL.RawQuery, reqOption.GetParametersToDecode())
 	}
 	return pipeline.Next(req, middlewareIndex)
+}
+
+func decodeUriEncodedString(originalValue string, parametersToDecode []byte) string {
+	resultValue := originalValue
+	for _, parameter := range parametersToDecode {
+		valueToReplace := "%" + strconv.FormatInt(int64(parameter), 16)
+		replacementValue := string(parameter)
+		resultValue = strings.ReplaceAll(strings.ReplaceAll(resultValue, strings.ToUpper(valueToReplace), replacementValue), strings.ToLower(valueToReplace), replacementValue)
+	}
+	return resultValue
 }

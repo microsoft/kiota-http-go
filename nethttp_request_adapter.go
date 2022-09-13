@@ -256,6 +256,7 @@ var queryParametersCleanupRegex = regexp.MustCompile(`\{\?[^\}]+}`)
 func (a *NetHttpRequestAdapter) startTracingSpan(ctx context.Context, requestInfo *abs.RequestInformation, methodName string) (context.Context, trace.Span) {
 	telemetryPathValue := queryParametersCleanupRegex.ReplaceAll([]byte(requestInfo.UrlTemplate), []byte(""))
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, methodName+" - "+string(telemetryPathValue))
+	span.SetAttributes(attribute.String("http.uri_template", decodeUriEncodedString(requestInfo.UrlTemplate, []byte{'-', '.', '~', '$'})))
 	return ctx, span
 }
 
@@ -267,7 +268,6 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 	ctx = a.prepareContext(ctx, requestInfo)
 	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendAsync")
 	defer span.End()
-	span.SetAttributes(attribute.String("http.uri_template", requestInfo.UrlTemplate))
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "", span)
 	if err != nil {
 		return nil, err
