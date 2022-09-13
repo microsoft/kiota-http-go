@@ -72,7 +72,7 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 	ctx := req.Context()
 	var span trace.Span
 	if obsOptions != nil {
-		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetObservabilityName()).Start(ctx, "ParametersNameDecodingHandler_Intercept")
+		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetTracerInstrumentationName()).Start(ctx, "ParametersNameDecodingHandler_Intercept")
 		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.parameters_name_decoding.enable", reqOption.GetEnable()))
 		req = req.WithContext(ctx)
 		defer span.End()

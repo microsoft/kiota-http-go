@@ -69,7 +69,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	ctx := req.Context()
 	var span trace.Span
 	if obsOptions != nil {
-		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetObservabilityName()).Start(ctx, "CompressionHandler_Intercept")
+		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetTracerInstrumentationName()).Start(ctx, "CompressionHandler_Intercept")
 		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.compression.enable", true))
 		defer span.End()
 		req = req.WithContext(ctx)

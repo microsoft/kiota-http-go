@@ -33,8 +33,8 @@ type NetHttpRequestAdapter struct {
 	authenticationProvider absauth.AuthenticationProvider
 	// The base url for every request.
 	baseUrl string
-	// The observation name for the request adapter.
-	observabilityName string
+	// The observation options for the request adapter.
+	observabilityOptions ObservabilityOptions
 }
 
 // NewNetHttpRequestAdapter creates a new NetHttpRequestAdapter with the given parameters
@@ -54,15 +54,15 @@ func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactory(a
 
 // NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClient creates a new NetHttpRequestAdapter with the given parameters
 func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClient(authenticationProvider absauth.AuthenticationProvider, parseNodeFactory absser.ParseNodeFactory, serializationWriterFactory absser.SerializationWriterFactory, httpClient *nethttp.Client) (*NetHttpRequestAdapter, error) {
-	return NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityName(authenticationProvider, parseNodeFactory, serializationWriterFactory, httpClient, "")
+	return NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityOptions(authenticationProvider, parseNodeFactory, serializationWriterFactory, httpClient, ObservabilityOptions{})
 }
 
-var DefaultObservationName = "kiota-http-go"
+const DefaultObservationName = "kiota-http-go"
 
-// NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityName creates a new NetHttpRequestAdapter with the given parameters
-func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityName(authenticationProvider absauth.AuthenticationProvider, parseNodeFactory absser.ParseNodeFactory, serializationWriterFactory absser.SerializationWriterFactory, httpClient *nethttp.Client, observabilityName string) (*NetHttpRequestAdapter, error) {
-	if observabilityName == "" {
-		observabilityName = DefaultObservationName
+// NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityOptions creates a new NetHttpRequestAdapter with the given parameters
+func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityOptions(authenticationProvider absauth.AuthenticationProvider, parseNodeFactory absser.ParseNodeFactory, serializationWriterFactory absser.SerializationWriterFactory, httpClient *nethttp.Client, observabilityOptions ObservabilityOptions) (*NetHttpRequestAdapter, error) {
+	if observabilityOptions.TracerInstrumentationName == "" {
+		observabilityOptions.TracerInstrumentationName = DefaultObservationName
 	}
 	if authenticationProvider == nil {
 		return nil, errors.New("authenticationProvider cannot be nil")
@@ -73,7 +73,7 @@ func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAn
 		httpClient:                 httpClient,
 		authenticationProvider:     authenticationProvider,
 		baseUrl:                    "",
-		observabilityName:          observabilityName,
+		observabilityOptions:       observabilityOptions,
 	}
 	if result.httpClient == nil {
 		defaultClient := GetDefaultClient()
@@ -109,7 +109,7 @@ func (a *NetHttpRequestAdapter) GetBaseUrl() string {
 }
 
 func (a *NetHttpRequestAdapter) getHttpResponseMessage(ctx context.Context, requestInfo *abs.RequestInformation, claims string, spanForAttributes trace.Span) (*nethttp.Response, error) {
-	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "getHttpResponseMessage")
+	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "getHttpResponseMessage")
 	defer span.End()
 	if ctx == nil {
 		ctx = context.Background()
@@ -152,7 +152,7 @@ var reClaims = regexp.MustCompile(`\"([^\"]*)\"`)
 var AuthenticateChallengedEventKey = "authenticate_challenge_received"
 
 func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, response *nethttp.Response, requestInfo *abs.RequestInformation, claims string, spanForAttributes trace.Span) (*nethttp.Response, error) {
-	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "retryCAEResponseIfRequired")
+	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "retryCAEResponseIfRequired")
 	defer span.End()
 	if response.StatusCode == 401 &&
 		claims == "" { //avoid infinite loop, we only retry once
@@ -205,13 +205,12 @@ func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo 
 	for _, value := range requestInfo.GetRequestOptions() {
 		ctx = context.WithValue(ctx, value.GetKey(), value)
 	}
-	ctx = context.WithValue(ctx, observabilityOptionsKeyValue, &ObservabilityOptions{
-		observabilityName: a.observabilityName,
-	})
+	options := a.observabilityOptions
+	ctx = context.WithValue(ctx, observabilityOptionsKeyValue, &options)
 	return ctx
 }
 func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Context, requestInfo *abs.RequestInformation, spanForAttributes trace.Span) (*nethttp.Request, error) {
-	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "getRequestFromRequestInformation")
+	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "getRequestFromRequestInformation")
 	defer span.End()
 	spanForAttributes.SetAttributes(attribute.String("http.method", requestInfo.Method.String()))
 	uri, err := requestInfo.GetUri()
@@ -219,11 +218,14 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		return nil, err
 	}
 	spanForAttributes.SetAttributes(
-		attribute.String("http.uri", uri.String()),
 		attribute.String("http.scheme", uri.Scheme),
 		attribute.String("http.host", uri.Host),
 		attribute.Int("http.request_content_length", len(requestInfo.Content)),
 	)
+
+	if a.observabilityOptions.IncludeEUIIAttibutes {
+		spanForAttributes.SetAttributes(attribute.String("http.uri", uri.String()))
+	}
 
 	request, err := nethttp.NewRequestWithContext(ctx, requestInfo.Method.String(), uri.String(), nil)
 
@@ -257,7 +259,7 @@ var queryParametersCleanupRegex = regexp.MustCompile(`\{\?[^\}]+}`)
 func (a *NetHttpRequestAdapter) startTracingSpan(ctx context.Context, requestInfo *abs.RequestInformation, methodName string) (context.Context, trace.Span) {
 	decodedUriTemplate := decodeUriEncodedString(requestInfo.UrlTemplate, []byte{'-', '.', '~', '$'})
 	telemetryPathValue := queryParametersCleanupRegex.ReplaceAll([]byte(decodedUriTemplate), []byte(""))
-	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, methodName+" - "+string(telemetryPathValue))
+	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, methodName+" - "+string(telemetryPathValue))
 	span.SetAttributes(attribute.String("http.uri_template", decodedUriTemplate))
 	return ctx, span
 }
@@ -299,7 +301,7 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 		if parseNode == nil {
 			return nil, nil
 		}
-		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetObjectValue")
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "GetObjectValue")
 		defer deserializeSpan.End()
 		result, err := parseNode.GetObjectValue(constructor)
 		a.setResponseType(result, span)
@@ -352,7 +354,7 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 		if parseNode == nil {
 			return nil, nil
 		}
-		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetEnumValue")
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "GetEnumValue")
 		defer deserializeSpan.End()
 		result, err := parseNode.GetEnumValue(parser)
 		a.setResponseType(result, span)
@@ -399,7 +401,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 		if parseNode == nil {
 			return nil, nil
 		}
-		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetCollectionOfObjectValues")
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "GetCollectionOfObjectValues")
 		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfObjectValues(constructor)
 		a.setResponseType(result, span)
@@ -446,7 +448,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 		if parseNode == nil {
 			return nil, nil
 		}
-		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetCollectionOfEnumValues")
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "GetCollectionOfEnumValues")
 		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfEnumValues(parser)
 		a.setResponseType(result, span)
@@ -510,7 +512,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 		if parseNode == nil {
 			return nil, nil
 		}
-		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "Get"+typeName+"Value")
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "Get"+typeName+"Value")
 		defer deserializeSpan.End()
 		var result interface{}
 		switch typeName {
@@ -577,7 +579,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 		if parseNode == nil {
 			return nil, nil
 		}
-		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetCollectionOfPrimitiveValues")
+		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "GetCollectionOfPrimitiveValues")
 		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfPrimitiveValues(typeName)
 		a.setResponseType(result, span)
@@ -618,7 +620,7 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestI
 }
 
 func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *nethttp.Response, spanForAttributes trace.Span) (absser.ParseNode, context.Context, error) {
-	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "getRootParseNode")
+	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "getRootParseNode")
 	defer span.End()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
@@ -648,7 +650,7 @@ var ErrorMappingFoundAttributeName = "error_mapping_found"
 var ErrorBodyFoundAttributeName = "error_body_found"
 
 func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, response *nethttp.Response, errorMappings abs.ErrorMappings, spanForAttributes trace.Span) error {
-	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "throwFailedResponses")
+	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "throwFailedResponses")
 	defer span.End()
 	if response.StatusCode < 400 {
 		return nil
@@ -687,7 +689,7 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, respon
 	}
 	spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, true))
 
-	_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetObjectValue")
+	_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityOptions.TracerInstrumentationName).Start(ctx, "GetObjectValue")
 	defer deserializeSpan.End()
 	errValue, err := rootNode.GetObjectValue(errorCtor)
 	if err != nil {

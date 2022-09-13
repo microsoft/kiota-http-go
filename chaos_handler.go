@@ -287,7 +287,7 @@ func (middleware ChaosHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 	ctx := req.Context()
 	var span trace.Span
 	if obsOptions != nil {
-		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetObservabilityName()).Start(ctx, "ChaosHandler_Intercept")
+		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetTracerInstrumentationName()).Start(ctx, "ChaosHandler_Intercept")
 		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.chaos.enable", true))
 		req = req.WithContext(ctx)
 		defer span.End()

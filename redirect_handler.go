@@ -90,7 +90,7 @@ func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex i
 	var span trace.Span
 	var observabilityName string
 	if obsOptions != nil {
-		observabilityName = obsOptions.GetObservabilityName()
+		observabilityName = obsOptions.GetTracerInstrumentationName()
 		ctx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept")
 		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.redirect.enable", true))
 		defer span.End()

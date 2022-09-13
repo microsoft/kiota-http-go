@@ -6,20 +6,41 @@ import (
 	abs "github.com/microsoft/kiota-abstractions-go"
 )
 
-// ObservabilityOptions defines the options for handlers
+// ObservabilityOptions holds the tracing, metrics and logging configuration for the request adapter
 type ObservabilityOptions struct {
-	observabilityName string
+	// The name of the tracer
+	TracerInstrumentationName string
+	// Whether to include attributes which could contains EUII information like URLs
+	IncludeEUIIAttibutes bool
 }
 
-// GetObservabilityName returns the observability name to use for the tracer
-func (o *ObservabilityOptions) GetObservabilityName() string {
-	return o.observabilityName
+// GetTracerInstrumentationName returns the observability name to use for the tracer
+func (o *ObservabilityOptions) GetTracerInstrumentationName() string {
+	return o.TracerInstrumentationName
+}
+
+// SetTracerInstrumentationName set the observability name to use for the tracer
+func (o *ObservabilityOptions) SetTracerInstrumentationName(value string) {
+	o.TracerInstrumentationName = value
+}
+
+// GetIncludeEUIIAttibutes returns whether to include attributes which could contains EUII information
+func (o *ObservabilityOptions) GetIncludeEUIIAttibutes() bool {
+	return o.IncludeEUIIAttibutes
+}
+
+// SetIncludeEUIIAttibutes set whether to include attributes which could contains EUII information
+func (o *ObservabilityOptions) SetIncludeEUIIAttibutes(value bool) {
+	o.IncludeEUIIAttibutes = value
 }
 
 // ObservabilityOptionsInt defines the options contract for handlers
 type ObservabilityOptionsInt interface {
 	abs.RequestOption
-	GetObservabilityName() string
+	GetTracerInstrumentationName() string
+	SetTracerInstrumentationName(string)
+	GetIncludeEUIIAttibutes() bool
+	SetIncludeEUIIAttibutes(value bool)
 }
 
 func (*ObservabilityOptions) GetKey() abs.RequestOptionKey {

@@ -45,7 +45,7 @@ func (pipeline *middlewarePipeline) Next(req *nethttp.Request, middlewareIndex i
 	var span trace.Span
 	var observabilityName string
 	if obsOptions != nil {
-		observabilityName = obsOptions.GetObservabilityName()
+		observabilityName = obsOptions.GetTracerInstrumentationName()
 		ctx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "request_transport")
 		defer span.End()
 		req = req.WithContext(ctx)

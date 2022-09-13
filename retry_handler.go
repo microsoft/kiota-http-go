@@ -106,7 +106,7 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 	var span trace.Span
 	var observabilityName string
 	if obsOptions != nil {
-		observabilityName = obsOptions.GetObservabilityName()
+		observabilityName = obsOptions.GetTracerInstrumentationName()
 		ctx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RetryHandler_Intercept")
 		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.retry.enable", true))
 		defer span.End()
