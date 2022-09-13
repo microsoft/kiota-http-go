@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/ioutil"
 	nethttp "net/http"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -254,9 +255,10 @@ var EventResponseHandlerInvokedKey = "response_handler_invoked"
 var queryParametersCleanupRegex = regexp.MustCompile(`\{\?[^\}]+}`)
 
 func (a *NetHttpRequestAdapter) startTracingSpan(ctx context.Context, requestInfo *abs.RequestInformation, methodName string) (context.Context, trace.Span) {
-	telemetryPathValue := queryParametersCleanupRegex.ReplaceAll([]byte(requestInfo.UrlTemplate), []byte(""))
+	decodedUriTemplate := decodeUriEncodedString(requestInfo.UrlTemplate, []byte{'-', '.', '~', '$'})
+	telemetryPathValue := queryParametersCleanupRegex.ReplaceAll([]byte(decodedUriTemplate), []byte(""))
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, methodName+" - "+string(telemetryPathValue))
-	span.SetAttributes(attribute.String("http.uri_template", decodeUriEncodedString(requestInfo.UrlTemplate, []byte{'-', '.', '~', '$'})))
+	span.SetAttributes(attribute.String("http.uri_template", decodedUriTemplate))
 	return ctx, span
 }
 
@@ -300,9 +302,16 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetObjectValue")
 		defer deserializeSpan.End()
 		result, err := parseNode.GetObjectValue(constructor)
+		a.setResponseType(result, span)
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
+	}
+}
+
+func (a *NetHttpRequestAdapter) setResponseType(result interface{}, span trace.Span) {
+	if result != nil {
+		span.SetAttributes(attribute.String("com.microsoft.kiota.response.type", reflect.TypeOf(result).String()))
 	}
 }
 
@@ -346,6 +355,7 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetEnumValue")
 		defer deserializeSpan.End()
 		result, err := parseNode.GetEnumValue(parser)
+		a.setResponseType(result, span)
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
@@ -392,6 +402,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetCollectionOfObjectValues")
 		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfObjectValues(constructor)
+		a.setResponseType(result, span)
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
@@ -438,6 +449,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetCollectionOfEnumValues")
 		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfEnumValues(parser)
+		a.setResponseType(result, span)
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
@@ -500,26 +512,29 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 		}
 		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "Get"+typeName+"Value")
 		defer deserializeSpan.End()
+		var result interface{}
 		switch typeName {
 		case "string":
-			return parseNode.GetStringValue()
+			result, err = parseNode.GetStringValue()
 		case "float32":
-			return parseNode.GetFloat32Value()
+			result, err = parseNode.GetFloat32Value()
 		case "float64":
-			return parseNode.GetFloat64Value()
+			result, err = parseNode.GetFloat64Value()
 		case "int32":
-			return parseNode.GetInt32Value()
+			result, err = parseNode.GetInt32Value()
 		case "int64":
-			return parseNode.GetInt64Value()
+			result, err = parseNode.GetInt64Value()
 		case "bool":
-			return parseNode.GetBoolValue()
+			result, err = parseNode.GetBoolValue()
 		case "Time":
-			return parseNode.GetTimeValue()
+			result, err = parseNode.GetTimeValue()
 		case "UUID":
-			return parseNode.GetUUIDValue()
+			result, err = parseNode.GetUUIDValue()
 		default:
 			return nil, errors.New("unsupported type")
 		}
+		a.setResponseType(result, span)
+		return result, err
 	} else {
 		return nil, errors.New("response is nil")
 	}
@@ -564,7 +579,9 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 		}
 		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityName).Start(ctx, "GetCollectionOfPrimitiveValues")
 		defer deserializeSpan.End()
-		return parseNode.GetCollectionOfPrimitiveValues(typeName)
+		result, err := parseNode.GetCollectionOfPrimitiveValues(typeName)
+		a.setResponseType(result, span)
+		return result, err
 	} else {
 		return nil, errors.New("response is nil")
 	}
