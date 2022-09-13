@@ -85,11 +85,17 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	unCompressedBody, err := ioutil.ReadAll(req.Body)
 	unCompressedContentLength := req.ContentLength
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return nil, err
 	}
 
 	compressedBody, size, err := compressReqBody(unCompressedBody)
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return nil, err
 	}
 

@@ -129,6 +129,7 @@ func (a *NetHttpRequestAdapter) getHttpResponseMessage(ctx context.Context, requ
 	}
 	response, err := (*a.httpClient).Do(request)
 	if err != nil {
+		spanForAttributes.RecordError(err)
 		return nil, err
 	}
 	if response != nil {
@@ -215,6 +216,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 	spanForAttributes.SetAttributes(attribute.String("http.method", requestInfo.Method.String()))
 	uri, err := requestInfo.GetUri()
 	if err != nil {
+		spanForAttributes.RecordError(err)
 		return nil, err
 	}
 	spanForAttributes.SetAttributes(
@@ -230,6 +232,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 	request, err := nethttp.NewRequestWithContext(ctx, requestInfo.Method.String(), uri.String(), nil)
 
 	if err != nil {
+		spanForAttributes.RecordError(err)
 		return nil, err
 	}
 	if len(requestInfo.Content) > 0 {
@@ -282,6 +285,7 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
+			span.RecordError(err)
 			return nil, err
 		}
 		return result.(absser.Parsable), nil
@@ -292,7 +296,7 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 			return nil, err
 		}
 		if a.shouldReturnNil(response) {
-			return nil, err
+			return nil, nil
 		}
 		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
@@ -305,6 +309,9 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 		defer deserializeSpan.End()
 		result, err := parseNode.GetObjectValue(constructor)
 		a.setResponseType(result, span)
+		if err != nil {
+			span.RecordError(err)
+		}
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
@@ -335,6 +342,7 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
+			span.RecordError(err)
 			return nil, err
 		}
 		return result.(absser.Parsable), nil
@@ -345,7 +353,7 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 			return nil, err
 		}
 		if a.shouldReturnNil(response) {
-			return nil, err
+			return nil, nil
 		}
 		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
@@ -358,6 +366,9 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 		defer deserializeSpan.End()
 		result, err := parseNode.GetEnumValue(parser)
 		a.setResponseType(result, span)
+		if err != nil {
+			span.RecordError(err)
+		}
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
@@ -382,6 +393,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
+			span.RecordError(err)
 			return nil, err
 		}
 		return result.([]absser.Parsable), nil
@@ -392,7 +404,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 			return nil, err
 		}
 		if a.shouldReturnNil(response) {
-			return nil, err
+			return nil, nil
 		}
 		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
@@ -405,6 +417,9 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfObjectValues(constructor)
 		a.setResponseType(result, span)
+		if err != nil {
+			span.RecordError(err)
+		}
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
@@ -429,6 +444,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
+			span.RecordError(err)
 			return nil, err
 		}
 		return result.([]interface{}), nil
@@ -439,7 +455,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 			return nil, err
 		}
 		if a.shouldReturnNil(response) {
-			return nil, err
+			return nil, nil
 		}
 		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
@@ -452,6 +468,9 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfEnumValues(parser)
 		a.setResponseType(result, span)
+		if err != nil {
+			span.RecordError(err)
+		}
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
@@ -484,6 +503,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
+			span.RecordError(err)
 			return nil, err
 		}
 		return result.(absser.Parsable), nil
@@ -494,11 +514,12 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 			return nil, err
 		}
 		if a.shouldReturnNil(response) {
-			return nil, err
+			return nil, nil
 		}
 		if typeName == "[]byte" {
 			res, err := ioutil.ReadAll(response.Body)
 			if err != nil {
+				span.RecordError(err)
 				return nil, err
 			} else if len(res) == 0 {
 				return nil, nil
@@ -536,6 +557,9 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 			return nil, errors.New("unsupported type")
 		}
 		a.setResponseType(result, span)
+		if err != nil {
+			span.RecordError(err)
+		}
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
@@ -560,6 +584,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
 		if err != nil {
+			span.RecordError(err)
 			return nil, err
 		}
 		return result.([]interface{}), nil
@@ -570,7 +595,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 			return nil, err
 		}
 		if a.shouldReturnNil(response) {
-			return nil, err
+			return nil, nil
 		}
 		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
@@ -583,6 +608,9 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 		defer deserializeSpan.End()
 		result, err := parseNode.GetCollectionOfPrimitiveValues(typeName)
 		a.setResponseType(result, span)
+		if err != nil {
+			span.RecordError(err)
+		}
 		return result, err
 	} else {
 		return nil, errors.New("response is nil")
@@ -606,6 +634,9 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestI
 	if responseHandler != nil {
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		_, err := responseHandler(response, errorMappings)
+		if err != nil {
+			span.RecordError(err)
+		}
 		return err
 	} else if response != nil {
 		defer a.purge(response)
@@ -624,6 +655,7 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	defer span.End()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
+		spanForAttributes.RecordError(err)
 		return nil, ctx, err
 	}
 	contentType := a.getResponsePrimaryContentType(response)
@@ -632,6 +664,9 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	}
 	spanForAttributes.SetAttributes(attribute.String("http.response_content_type", contentType))
 	rootNode, err := a.parseNodeFactory.GetRootParseNode(contentType, body)
+	if err != nil {
+		spanForAttributes.RecordError(err)
+	}
 	return rootNode, ctx, err
 }
 func (a *NetHttpRequestAdapter) purge(response *nethttp.Response) error {
@@ -671,21 +706,26 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, respon
 
 	if errorCtor == nil {
 		spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, false))
-		return &abs.ApiError{
+		err := &abs.ApiError{
 			Message: "The server returned an unexpected status code and no error factory is registered for this code: " + statusAsString,
 		}
+		spanForAttributes.RecordError(err)
+		return err
 	}
 	spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, true))
 
 	rootNode, _, err := a.getRootParseNode(ctx, response, spanForAttributes)
 	if err != nil {
+		spanForAttributes.RecordError(err)
 		return err
 	}
 	if rootNode == nil {
 		spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, false))
-		return &abs.ApiError{
+		err := &abs.ApiError{
 			Message: "The server returned an unexpected status code with no response body: " + statusAsString,
 		}
+		spanForAttributes.RecordError(err)
+		return err
 	}
 	spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, true))
 
@@ -693,6 +733,7 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, respon
 	defer deserializeSpan.End()
 	errValue, err := rootNode.GetObjectValue(errorCtor)
 	if err != nil {
+		spanForAttributes.RecordError(err)
 		return err
 	} else if errValue == nil {
 		return &abs.ApiError{
@@ -700,5 +741,7 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, respon
 		}
 	}
 
-	return errValue.(error)
+	err = errValue.(error)
+	spanForAttributes.RecordError(err)
+	return err
 }
