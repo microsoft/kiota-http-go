@@ -133,6 +133,10 @@ func (a *NetHttpRequestAdapter) getHttpResponseMessage(ctx context.Context, requ
 			contentLen, _ := strconv.Atoi(contentLenHeader)
 			spanForAttributes.SetAttributes(attribute.Int("http.response_content_length", contentLen))
 		}
+		contentTypeHeader := response.Header.Get("Content-Type")
+		if contentTypeHeader != "" {
+			spanForAttributes.SetAttributes(attribute.String("http.response_content_type", contentTypeHeader))
+		}
 		spanForAttributes.SetAttributes(
 			attribute.Int("http.status_code", response.StatusCode),
 			attribute.String("http.flavor", response.Proto),
@@ -659,7 +663,6 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	if contentType == "" {
 		return nil, ctx, nil
 	}
-	spanForAttributes.SetAttributes(attribute.String("http.response_content_type", contentType))
 	rootNode, err := a.parseNodeFactory.GetRootParseNode(contentType, body)
 	if err != nil {
 		spanForAttributes.RecordError(err)
