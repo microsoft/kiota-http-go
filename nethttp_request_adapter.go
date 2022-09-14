@@ -720,14 +720,14 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, respon
 		return err
 	}
 	if rootNode == nil {
-		spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, false))
+		spanForAttributes.SetAttributes(attribute.Bool(ErrorBodyFoundAttributeName, false))
 		err := &abs.ApiError{
 			Message: "The server returned an unexpected status code with no response body: " + statusAsString,
 		}
 		spanForAttributes.RecordError(err)
 		return err
 	}
-	spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, true))
+	spanForAttributes.SetAttributes(attribute.Bool(ErrorBodyFoundAttributeName, true))
 
 	_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "GetObjectValue")
 	defer deserializeSpan.End()
