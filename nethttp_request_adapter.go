@@ -690,7 +690,7 @@ func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, respon
 	if response.StatusCode < 400 {
 		return nil
 	}
-	span.SetStatus(codes.Error, "received_error_response")
+	spanForAttributes.SetStatus(codes.Error, "received_error_response")
 
 	statusAsString := strconv.Itoa(response.StatusCode)
 	var errorCtor absser.ParsableFactory = nil
