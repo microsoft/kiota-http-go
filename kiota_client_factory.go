@@ -3,9 +3,43 @@
 package nethttplibrary
 
 import (
+	"log"
 	nethttp "net/http"
+	"net/url"
 	"time"
 )
+
+// GetDefaultClientWithProxySettings creates a new default net/http client with a proxy url and default middleware
+func GetDefaultClientWithProxySettings(proxyUrlStr string) *nethttp.Client {
+	client := getDefaultClientWithoutMiddleware()
+	client.Transport = getTransportWithProxy(proxyUrlStr, nil)
+	return client
+}
+
+// GetDefaultClientWithAuthenticatedProxySettings creates a new default net/http client with a proxy url and default middleware
+func GetDefaultClientWithAuthenticatedProxySettings(proxyUrlStr string, username string, password string) *nethttp.Client {
+	client := getDefaultClientWithoutMiddleware()
+
+	proxyAuthOptions := NewProxyAuthenticationOptions(&username, &password)
+	proxyHandler := NewProxyAuthenticationHandlerWithOptions(proxyAuthOptions)
+	client.Transport = getTransportWithProxy(proxyUrlStr, proxyHandler)
+	return client
+}
+
+func getTransportWithProxy(proxyUrlStr string, proxyAuthenticationHandler *ProxyAuthenticationHandler) nethttp.RoundTripper {
+	proxyURL, err := url.Parse(proxyUrlStr)
+	if err != nil {
+		log.Println(err)
+	}
+
+	transport := &nethttp.Transport{
+		Proxy: nethttp.ProxyURL(proxyURL),
+	}
+	defaultMiddleWare := GetDefaultMiddlewares()
+	middlewares := append(defaultMiddleWare, proxyAuthenticationHandler)
+
+	return NewCustomTransportWithParentTransport(transport, middlewares...)
+}
 
 // GetDefaultClient creates a new default net/http client with the options configured for the Kiota request adapter
 func GetDefaultClient(middleware ...Middleware) *nethttp.Client {
