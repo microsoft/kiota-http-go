@@ -365,9 +365,9 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 }
 
 func getResponseHandler(ctx context.Context) abs.ResponseHandler {
-	var optionKey = ctx.Value(abs.ResponseHandlerOptionKey)
-	if optionKey != nil {
-		return ctx.Value(abs.ResponseHandlerOptionKey).(abs.RequestHandlerOption).GetResponseHandler()
+	var handlerOption = ctx.Value(abs.ResponseHandlerOptionKey)
+	if handlerOption != nil {
+		return handlerOption.(abs.RequestHandlerOption).GetResponseHandler()
 	}
 	return nil
 }
