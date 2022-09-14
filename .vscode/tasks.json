@@ -8,6 +8,9 @@
             "group": "build",
             "args": [
                 "build"
+            ],
+            "problemMatcher": [
+                "$go"
             ]
         },
         {
@@ -17,6 +20,9 @@
             "group": "test",
             "args": [
                 "test"
+            ],
+            "problemMatcher": [
+                "$go"
             ]
         }
     ]
