@@ -3,42 +3,53 @@
 package nethttplibrary
 
 import (
-	"log"
 	nethttp "net/http"
 	"net/url"
 	"time"
 )
 
 // GetDefaultClientWithProxySettings creates a new default net/http client with a proxy url and default middleware
-func GetDefaultClientWithProxySettings(proxyUrlStr string) *nethttp.Client {
+func GetDefaultClientWithProxySettings(proxyUrlStr string) (*nethttp.Client, error) {
 	client := getDefaultClientWithoutMiddleware()
-	client.Transport = getTransportWithProxy(proxyUrlStr, nil)
-	return client
+
+	transport, err := getTransportWithProxy(proxyUrlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+	client.Transport = transport
+	return client, nil
 }
 
 // GetDefaultClientWithAuthenticatedProxySettings creates a new default net/http client with a proxy url and default middleware
-func GetDefaultClientWithAuthenticatedProxySettings(proxyUrlStr string, username string, password string) *nethttp.Client {
+func GetDefaultClientWithAuthenticatedProxySettings(proxyUrlStr string, username string, password string) (*nethttp.Client, error) {
 	client := getDefaultClientWithoutMiddleware()
 
-	proxyAuthOptions := NewProxyAuthenticationOptions(&username, &password)
-	proxyHandler := NewProxyAuthenticationHandlerWithOptions(proxyAuthOptions)
-	client.Transport = getTransportWithProxy(proxyUrlStr, proxyHandler)
-	return client
+	user := url.UserPassword(username, password)
+	transport, err := getTransportWithProxy(proxyUrlStr, user)
+	if err != nil {
+		return nil, err
+	}
+	client.Transport = transport
+	return client, nil
 }
 
-func getTransportWithProxy(proxyUrlStr string, proxyAuthenticationHandler *ProxyAuthenticationHandler) nethttp.RoundTripper {
+func getTransportWithProxy(proxyUrlStr string, user *url.Userinfo) (nethttp.RoundTripper, error) {
 	proxyURL, err := url.Parse(proxyUrlStr)
 	if err != nil {
-		log.Println(err)
+		return nil, err
+	}
+
+	if user != nil {
+		proxyURL.User = user
 	}
 
 	transport := &nethttp.Transport{
 		Proxy: nethttp.ProxyURL(proxyURL),
 	}
-	defaultMiddleWare := GetDefaultMiddlewares()
-	middlewares := append(defaultMiddleWare, proxyAuthenticationHandler)
 
-	return NewCustomTransportWithParentTransport(transport, middlewares...)
+	middlewares := GetDefaultMiddlewares()
+
+	return NewCustomTransportWithParentTransport(transport, middlewares...), nil
 }
 
 // GetDefaultClient creates a new default net/http client with the options configured for the Kiota request adapter
