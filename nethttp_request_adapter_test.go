@@ -240,8 +240,7 @@ func TestResponseHandlerIsCalledWhenProvided(t *testing.T) {
 
 	request.AddRequestOptions([]abs.RequestOption{handlerOption})
 
-	res, err := adapter.SendAsync(context.Background(), request, nil, nil)
+	err = adapter.SendNoContentAsync(context.Background(), request, nil)
 	assert.Nil(t, err)
-	assert.Nil(t, res)
 	assert.Equal(t, 2, count)
 }
