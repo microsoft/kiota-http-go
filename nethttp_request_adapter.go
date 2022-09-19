@@ -150,7 +150,7 @@ const claimsKey = "claims"
 var reBearer = regexp.MustCompile(`(?i)^Bearer\s`)
 var reClaims = regexp.MustCompile(`\"([^\"]*)\"`)
 
-const AuthenticateChallengedEventKey = "authenticate_challenge_received"
+const AuthenticateChallengedEventKey = "com.microsoft.kiota.authenticate_challenge_received"
 
 func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, response *nethttp.Response, requestInfo *abs.RequestInformation, claims string, spanForAttributes trace.Span) (*nethttp.Response, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "retryCAEResponseIfRequired")
@@ -206,8 +206,15 @@ func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo 
 	for _, value := range requestInfo.GetRequestOptions() {
 		ctx = context.WithValue(ctx, value.GetKey(), value)
 	}
-	options := a.observabilityOptions
-	ctx = context.WithValue(ctx, observabilityOptionsKeyValue, &options)
+	obsOptionsSet := false
+	if reqObsOpt := ctx.Value(observabilityOptionsKeyValue); reqObsOpt != nil {
+		if _, ok := reqObsOpt.(ObservabilityOptionsInt); ok {
+			obsOptionsSet = true
+		}
+	}
+	if !obsOptionsSet {
+		ctx = context.WithValue(ctx, observabilityOptionsKeyValue, &a.observabilityOptions)
+	}
 	return ctx
 }
 func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Context, requestInfo *abs.RequestInformation, spanForAttributes trace.Span) (*nethttp.Request, error) {
@@ -222,7 +229,6 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 	spanForAttributes.SetAttributes(
 		attribute.String("http.scheme", uri.Scheme),
 		attribute.String("http.host", uri.Host),
-		attribute.Int("http.request_content_length", len(requestInfo.Content)),
 	)
 
 	if a.observabilityOptions.IncludeEUIIAttibutes {
@@ -246,9 +252,15 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		for key, value := range requestInfo.Headers {
 			request.Header.Set(key, value)
 		}
-		if requestInfo.Headers["Content-Type"] != "" { //TODO the map is case sensitive and should be normalized
+		if request.Header.Get("Content-Type") != "" {
 			spanForAttributes.SetAttributes(
-				attribute.String("http.request_content_type", requestInfo.Headers["Content-Type"]),
+				attribute.String("http.request_content_type", request.Header.Get("Content-Type")),
+			)
+		}
+		if request.Header.Get("Content-Length") != "" {
+			contentLenVal, _ := strconv.Atoi(request.Header.Get("Content-Length"))
+			spanForAttributes.SetAttributes(
+				attribute.Int("http.request_content_type", contentLenVal),
 			)
 		}
 	}
@@ -256,7 +268,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 	return request, nil
 }
 
-const EventResponseHandlerInvokedKey = "response_handler_invoked"
+const EventResponseHandlerInvokedKey = "com.microsoft.kiota.response_handler_invoked"
 
 var queryParametersCleanupRegex = regexp.MustCompile(`\{\?[^\}]+}`)
 
@@ -681,8 +693,11 @@ func (a *NetHttpRequestAdapter) shouldReturnNil(response *nethttp.Response) bool
 	return response.StatusCode == 204
 }
 
-const ErrorMappingFoundAttributeName = "error_mapping_found"
-const ErrorBodyFoundAttributeName = "error_body_found"
+// ErrorMappingFoundAttributeName is the attribute name used to indicate whether an error code mapping was found.
+const ErrorMappingFoundAttributeName = "com.microsoft.kiota.error.mapping_found"
+
+// ErrorBodyFoundAttributeName is the attribute name used to indicate whether the error response contained a body
+const ErrorBodyFoundAttributeName = "com.microsoft.kiota.error.body_found"
 
 func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, response *nethttp.Response, errorMappings abs.ErrorMappings, spanForAttributes trace.Span) error {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "throwFailedResponses")

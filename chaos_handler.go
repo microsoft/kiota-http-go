@@ -275,7 +275,8 @@ func createChaosResponse(handler chaosHandlerOptionsInt, req *nethttp.Request) (
 	return responseBody, nil
 }
 
-const ChaosHandlerTriggeredEventKey = "chaos_handler_triggered"
+// ChaosHandlerTriggeredEventKey is the key used for the open telemetry event
+const ChaosHandlerTriggeredEventKey = "com.microsoft.kiota.chaos_handler_triggered"
 
 func (middleware ChaosHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
 	reqOption, ok := req.Context().Value(chaosHandlerKey).(chaosHandlerOptionsInt)
