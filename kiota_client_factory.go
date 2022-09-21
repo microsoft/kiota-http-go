@@ -8,11 +8,12 @@ import (
 	"time"
 )
 
-// GetDefaultClientWithProxySettings creates a new default net/http client with a proxy url and default middleware
-func GetDefaultClientWithProxySettings(proxyUrlStr string) (*nethttp.Client, error) {
+// GetClientWithProxySettings creates a new default net/http client with a proxy url and default middleware
+// Not providing any middleware would result in having default middleware provided
+func GetClientWithProxySettings(proxyUrlStr string, middleware ...Middleware) (*nethttp.Client, error) {
 	client := getDefaultClientWithoutMiddleware()
 
-	transport, err := getTransportWithProxy(proxyUrlStr, nil)
+	transport, err := getTransportWithProxy(proxyUrlStr, nil, middleware...)
 	if err != nil {
 		return nil, err
 	}
@@ -20,12 +21,13 @@ func GetDefaultClientWithProxySettings(proxyUrlStr string) (*nethttp.Client, err
 	return client, nil
 }
 
-// GetDefaultClientWithAuthenticatedProxySettings creates a new default net/http client with a proxy url and default middleware
-func GetDefaultClientWithAuthenticatedProxySettings(proxyUrlStr string, username string, password string) (*nethttp.Client, error) {
+// GetClientWithAuthenticatedProxySettings creates a new default net/http client with a proxy url and default middleware
+// Not providing any middleware would result in having default middleware provided
+func GetClientWithAuthenticatedProxySettings(proxyUrlStr string, username string, password string, middleware ...Middleware) (*nethttp.Client, error) {
 	client := getDefaultClientWithoutMiddleware()
 
 	user := url.UserPassword(username, password)
-	transport, err := getTransportWithProxy(proxyUrlStr, user)
+	transport, err := getTransportWithProxy(proxyUrlStr, user, middleware...)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +35,7 @@ func GetDefaultClientWithAuthenticatedProxySettings(proxyUrlStr string, username
 	return client, nil
 }
 
-func getTransportWithProxy(proxyUrlStr string, user *url.Userinfo) (nethttp.RoundTripper, error) {
+func getTransportWithProxy(proxyUrlStr string, user *url.Userinfo, middlewares ...Middleware) (nethttp.RoundTripper, error) {
 	proxyURL, err := url.Parse(proxyUrlStr)
 	if err != nil {
 		return nil, err
@@ -47,7 +49,9 @@ func getTransportWithProxy(proxyUrlStr string, user *url.Userinfo) (nethttp.Roun
 		Proxy: nethttp.ProxyURL(proxyURL),
 	}
 
-	middlewares := GetDefaultMiddlewares()
+	if len(middlewares) == 0 {
+		middlewares = GetDefaultMiddlewares()
+	}
 
 	return NewCustomTransportWithParentTransport(transport, middlewares...), nil
 }
