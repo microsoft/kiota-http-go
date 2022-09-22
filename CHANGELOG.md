@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.7.3] - 2022-09-22
+
+### Added
+
+- Added support for constructing a proxy authenticated client.
+
 ## [0.7.2] - 2022-09-09
 
 ### Changed
