@@ -231,7 +231,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		attribute.String("http.host", uri.Host),
 	)
 
-	if a.observabilityOptions.IncludeEUIIAttibutes {
+	if a.observabilityOptions.IncludeEUIIAttributes {
 		spanForAttributes.SetAttributes(attribute.String("http.uri", uri.String()))
 	}
 

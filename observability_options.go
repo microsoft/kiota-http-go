@@ -9,7 +9,7 @@ import (
 // ObservabilityOptions holds the tracing, metrics and logging configuration for the request adapter
 type ObservabilityOptions struct {
 	// Whether to include attributes which could contains EUII information like URLs
-	IncludeEUIIAttibutes bool
+	IncludeEUIIAttributes bool
 }
 
 // GetTracerInstrumentationName returns the observability name to use for the tracer
@@ -17,22 +17,22 @@ func (o *ObservabilityOptions) GetTracerInstrumentationName() string {
 	return "github.com/microsoft/kiota-http-go"
 }
 
-// GetIncludeEUIIAttibutes returns whether to include attributes which could contains EUII information
-func (o *ObservabilityOptions) GetIncludeEUIIAttibutes() bool {
-	return o.IncludeEUIIAttibutes
+// GetIncludeEUIIAttributes returns whether to include attributes which could contains EUII information
+func (o *ObservabilityOptions) GetIncludeEUIIAttributes() bool {
+	return o.IncludeEUIIAttributes
 }
 
-// SetIncludeEUIIAttibutes set whether to include attributes which could contains EUII information
-func (o *ObservabilityOptions) SetIncludeEUIIAttibutes(value bool) {
-	o.IncludeEUIIAttibutes = value
+// SetIncludeEUIIAttributes set whether to include attributes which could contains EUII information
+func (o *ObservabilityOptions) SetIncludeEUIIAttributes(value bool) {
+	o.IncludeEUIIAttributes = value
 }
 
 // ObservabilityOptionsInt defines the options contract for handlers
 type ObservabilityOptionsInt interface {
 	abs.RequestOption
 	GetTracerInstrumentationName() string
-	GetIncludeEUIIAttibutes() bool
-	SetIncludeEUIIAttibutes(value bool)
+	GetIncludeEUIIAttributes() bool
+	SetIncludeEUIIAttributes(value bool)
 }
 
 func (*ObservabilityOptions) GetKey() abs.RequestOptionKey {
