@@ -4,16 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	abs "github.com/microsoft/kiota-abstractions-go"
+	absauth "github.com/microsoft/kiota-abstractions-go/authentication"
+	absser "github.com/microsoft/kiota-abstractions-go/serialization"
 	"io/ioutil"
 	nethttp "net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	abs "github.com/microsoft/kiota-abstractions-go"
-	absauth "github.com/microsoft/kiota-abstractions-go/authentication"
-	absser "github.com/microsoft/kiota-abstractions-go/serialization"
 )
 
 // NetHttpRequestAdapter implements the RequestAdapter interface using net/http
@@ -157,10 +156,9 @@ func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs
 
 const requestTimeOutInSeconds = 100
 
-func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Context, requestInfo *abs.RequestInformation) (*nethttp.Request, error) {
-	uri, err := requestInfo.GetUri()
-	if err != nil {
-		return nil, err
+func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo *abs.RequestInformation) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	// set deadline if not set in receiving context
@@ -169,7 +167,20 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		ctx = ctxTimed
 	}
 
+	for _, value := range requestInfo.GetRequestOptions() {
+		ctx = context.WithValue(ctx, value.GetKey(), value)
+	}
+	return ctx
+}
+
+func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Context, requestInfo *abs.RequestInformation) (*nethttp.Request, error) {
+	uri, err := requestInfo.GetUri()
+	if err != nil {
+		return nil, err
+	}
+
 	request, err := nethttp.NewRequestWithContext(ctx, requestInfo.Method.String(), uri.String(), nil)
+
 	if err != nil {
 		return nil, err
 	}
@@ -185,9 +196,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 			request.Header.Set(key, value)
 		}
 	}
-	for _, value := range requestInfo.GetRequestOptions() {
-		request = request.WithContext(context.WithValue(ctx, value.GetKey(), value))
-	}
+
 	return request, nil
 }
 
@@ -196,6 +205,7 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
+	ctx = a.prepareContext(ctx, requestInfo)
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "")
 	if err != nil {
 		return nil, err
@@ -236,6 +246,7 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
+	ctx = a.prepareContext(ctx, requestInfo)
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "")
 	if err != nil {
 		return nil, err
@@ -276,6 +287,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
+	ctx = a.prepareContext(ctx, requestInfo)
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "")
 	if err != nil {
 		return nil, err
@@ -316,6 +328,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
+	ctx = a.prepareContext(ctx, requestInfo)
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "")
 	if err != nil {
 		return nil, err
@@ -352,9 +365,9 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 }
 
 func getResponseHandler(ctx context.Context) abs.ResponseHandler {
-	var optionKey = ctx.Value(abs.ResponseHandlerOptionKey)
-	if optionKey != nil {
-		return ctx.Value(abs.ResponseHandlerOptionKey).(abs.RequestHandlerOption).GetResponseHandler()
+	var handlerOption = ctx.Value(abs.ResponseHandlerOptionKey)
+	if handlerOption != nil {
+		return handlerOption.(abs.RequestHandlerOption).GetResponseHandler()
 	}
 	return nil
 }
@@ -364,6 +377,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
+	ctx = a.prepareContext(ctx, requestInfo)
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "")
 	if err != nil {
 		return nil, err
@@ -431,6 +445,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
+	ctx = a.prepareContext(ctx, requestInfo)
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "")
 	if err != nil {
 		return nil, err
@@ -470,6 +485,7 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestI
 	if requestInfo == nil {
 		return errors.New("requestInfo cannot be nil")
 	}
+	ctx = a.prepareContext(ctx, requestInfo)
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "")
 	if err != nil {
 		return err
