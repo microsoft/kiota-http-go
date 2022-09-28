@@ -20,6 +20,10 @@ func (e *MockParseNodeFactory) GetRootParseNode(contentType string, content []by
 type MockParseNode struct {
 }
 
+func (*MockParseNode) GetRawValue() (interface{}, error) {
+	return nil, nil
+}
+
 func (e *MockParseNode) GetChildNode(index string) (absser.ParseNode, error) {
 	return nil, nil
 }
