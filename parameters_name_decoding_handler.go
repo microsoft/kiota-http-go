@@ -8,7 +8,6 @@ import (
 	abs "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // ParametersNameDecodingOptions defines the options for the ParametersNameDecodingHandler
