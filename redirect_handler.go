@@ -1,12 +1,17 @@
 package nethttplibrary
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	nethttp "net/http"
 	"net/url"
 	"strings"
 
 	abs "github.com/microsoft/kiota-abstractions-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RedirectHandler handles redirect responses and follows them according to the options specified.
@@ -80,6 +85,17 @@ const locationHeader = "Location"
 
 // Intercept implements the interface and evaluates whether to follow a redirect response.
 func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	obsOptions := GetObservabilityOptionsFromRequest(req)
+	ctx := req.Context()
+	var span trace.Span
+	var observabilityName string
+	if obsOptions != nil {
+		observabilityName = obsOptions.GetTracerInstrumentationName()
+		ctx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept")
+		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.redirect.enable", true))
+		defer span.End()
+		req = req.WithContext(ctx)
+	}
 	response, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
 		return response, err
@@ -88,10 +104,10 @@ func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex i
 	if !ok {
 		reqOption = &middleware.options
 	}
-	return middleware.redirectRequest(pipeline, middlewareIndex, reqOption, req, response, 0)
+	return middleware.redirectRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, observabilityName)
 }
 
-func (middleware RedirectHandler) redirectRequest(pipeline Pipeline, middlewareIndex int, reqOption redirectHandlerOptionsInt, req *nethttp.Request, response *nethttp.Response, redirectCount int) (*nethttp.Response, error) {
+func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline Pipeline, middlewareIndex int, reqOption redirectHandlerOptionsInt, req *nethttp.Request, response *nethttp.Response, redirectCount int, observabilityName string) (*nethttp.Response, error) {
 	shouldRedirect := reqOption.GetShouldRedirect() != nil && reqOption.GetShouldRedirect()(req, response) || reqOption.GetShouldRedirect() == nil
 	if middleware.isRedirectResponse(response) &&
 		redirectCount < reqOption.GetMaxRedirect() &&
@@ -101,11 +117,20 @@ func (middleware RedirectHandler) redirectRequest(pipeline Pipeline, middlewareI
 		if err != nil {
 			return response, err
 		}
+		if observabilityName != "" {
+			ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
+			span.SetAttributes(attribute.Int("com.microsoft.kiota.handler.redirect.count", redirectCount),
+				attribute.Int("http.status_code", response.StatusCode),
+			)
+			defer span.End()
+			redirectRequest = redirectRequest.WithContext(ctx)
+		}
+
 		result, err := pipeline.Next(redirectRequest, middlewareIndex)
 		if err != nil {
 			return result, err
 		}
-		return middleware.redirectRequest(pipeline, middlewareIndex, reqOption, redirectRequest, result, redirectCount)
+		return middleware.redirectRequest(ctx, pipeline, middlewareIndex, reqOption, redirectRequest, result, redirectCount, observabilityName)
 	}
 	return response, nil
 }

@@ -2,6 +2,9 @@ package nethttplibrary
 
 import (
 	nethttp "net/http"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Pipeline contract for middleware infrastructure
@@ -37,7 +40,16 @@ func (pipeline *middlewarePipeline) Next(req *nethttp.Request, middlewareIndex i
 		middleware := pipeline.middlewares[middlewareIndex]
 		return middleware.Intercept(pipeline, middlewareIndex+1, req)
 	}
-
+	obsOptions := GetObservabilityOptionsFromRequest(req)
+	ctx := req.Context()
+	var span trace.Span
+	var observabilityName string
+	if obsOptions != nil {
+		observabilityName = obsOptions.GetTracerInstrumentationName()
+		ctx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "request_transport")
+		defer span.End()
+		req = req.WithContext(ctx)
+	}
 	return pipeline.transport.RoundTrip(req)
 }
 

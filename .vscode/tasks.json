@@ -1,0 +1,29 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "command": "go",
+            "type": "process",
+            "group": "build",
+            "args": [
+                "build"
+            ],
+            "problemMatcher": [
+                "$go"
+            ]
+        },
+        {
+            "label": "test",
+            "command": "go",
+            "type": "process",
+            "group": "test",
+            "args": [
+                "test"
+            ],
+            "problemMatcher": [
+                "$go"
+            ]
+        }
+    ]
+}
