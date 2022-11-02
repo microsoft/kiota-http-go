@@ -260,7 +260,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		if request.Header.Get("Content-Length") != "" {
 			contentLenVal, _ := strconv.Atoi(request.Header.Get("Content-Length"))
 			spanForAttributes.SetAttributes(
-				attribute.Int("http.request_content_type", contentLenVal),
+				attribute.Int("http.request_content_length", contentLenVal),
 			)
 		}
 	}
