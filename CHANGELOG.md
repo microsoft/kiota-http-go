@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Fixed http.request_content_length attribute name for tracing
+
 ## [0.9.0] - 2022-09-27
 
 ### Added
