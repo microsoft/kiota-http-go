@@ -304,7 +304,7 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 		return result.(absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(ctx, response, errorMappings, span)
+		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
 			return nil, err
 		}
@@ -361,7 +361,7 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 		return result.(absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(ctx, response, errorMappings, span)
+		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
 			return nil, err
 		}
@@ -412,7 +412,7 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 		return result.([]absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(ctx, response, errorMappings, span)
+		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
 			return nil, err
 		}
@@ -463,7 +463,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 		return result.([]interface{}), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(ctx, response, errorMappings, span)
+		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
 			return nil, err
 		}
@@ -522,7 +522,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 		return result.(absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(ctx, response, errorMappings, span)
+		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
 			return nil, err
 		}
@@ -603,7 +603,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 		return result.([]interface{}), nil
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(ctx, response, errorMappings, span)
+		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
 			return nil, err
 		}
@@ -653,7 +653,7 @@ func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestI
 		return err
 	} else if response != nil {
 		defer a.purge(response)
-		err = a.throwFailedResponses(ctx, response, errorMappings, span)
+		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
 			return err
 		}
@@ -699,8 +699,8 @@ const ErrorMappingFoundAttributeName = "com.microsoft.kiota.error.mapping_found"
 // ErrorBodyFoundAttributeName is the attribute name used to indicate whether the error response contained a body
 const ErrorBodyFoundAttributeName = "com.microsoft.kiota.error.body_found"
 
-func (a *NetHttpRequestAdapter) throwFailedResponses(ctx context.Context, response *nethttp.Response, errorMappings abs.ErrorMappings, spanForAttributes trace.Span) error {
-	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "throwFailedResponses")
+func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, response *nethttp.Response, errorMappings abs.ErrorMappings, spanForAttributes trace.Span) error {
+	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "throwIfFailedResponse")
 	defer span.End()
 	if response.StatusCode < 400 {
 		return nil
