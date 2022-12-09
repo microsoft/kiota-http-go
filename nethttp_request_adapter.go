@@ -249,8 +249,11 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		request.Header = make(nethttp.Header)
 	}
 	if requestInfo.Headers != nil {
-		for key, value := range requestInfo.Headers {
-			request.Header.Set(key, value)
+		for _, key := range requestInfo.Headers.ListKeys() {
+			values := requestInfo.Headers.Get(key)
+			for _, v := range values {
+				request.Header.Add(key, v)
+			}
 		}
 		if request.Header.Get("Content-Type") != "" {
 			spanForAttributes.SetAttributes(
