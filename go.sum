@@ -1,5 +1,5 @@
-github.com/cjlapao/common-go v0.0.29 h1:SOiTEEmA/YWOaP37U8beyqbxjvTtWcUAuvQAchGOQLE=
-github.com/cjlapao/common-go v0.0.29/go.mod h1:OyTAY388jfEj8uaRzx0uYneFghKDLL5KP+ewSydlQ5g=
+github.com/cjlapao/common-go v0.0.36 h1:5KvHs+1H4UOAAfZ8MFSA3DALo4JftAOixLq95SZxVUQ=
+github.com/cjlapao/common-go v0.0.36/go.mod h1:M3dzazLjTjEtZJbbxoA5ZDiGCiHmpwqW9l4UWaddwOA=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -15,8 +15,8 @@ github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
 github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
-github.com/microsoft/kiota-abstractions-go v0.14.0 h1:TCYk1+CoBFNhTefKu8OTky4w4HnOoD72EJOeTsTNml8=
-github.com/microsoft/kiota-abstractions-go v0.14.0/go.mod h1:/zQPz5M7868/bbN8D4tZHhnOE23Tcc/JBKSNwljOch4=
+github.com/microsoft/kiota-abstractions-go v0.15.0 h1:NjJvIchKPJCxuVCKzfv28bxRkW+djpnlkcdphsOriKY=
+github.com/microsoft/kiota-abstractions-go v0.15.0/go.mod h1:YqOu8G6bZTG0eCIWrmEny8PaF750uaw7tLFac4psf+4=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
