@@ -4,14 +4,14 @@ go 1.18
 
 require (
 	github.com/google/uuid v1.3.0
-	github.com/microsoft/kiota-abstractions-go v0.14.0
+	github.com/microsoft/kiota-abstractions-go v0.15.0
 	github.com/stretchr/testify v1.8.1
 	go.opentelemetry.io/otel v1.11.2
 	go.opentelemetry.io/otel/trace v1.11.2
 )
 
 require (
-	github.com/cjlapao/common-go v0.0.29 // indirect
+	github.com/cjlapao/common-go v0.0.36 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
