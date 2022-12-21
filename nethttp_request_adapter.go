@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"io/ioutil"
 	nethttp "net/http"
 	"reflect"
@@ -20,6 +21,19 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// nopCloser is an alternate io.nopCloser implementation which
+// provides io.ReadSeekCloser instead of io.ReadCloser as we need
+// Seek for retries
+type nopCloser struct {
+	io.ReadSeeker
+}
+
+func NopCloser(r io.ReadSeeker) io.ReadSeekCloser {
+	return nopCloser{r}
+}
+
+func (nopCloser) Close() error { return nil }
 
 // NetHttpRequestAdapter implements the RequestAdapter interface using net/http
 type NetHttpRequestAdapter struct {
@@ -217,6 +231,7 @@ func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo 
 	}
 	return ctx
 }
+
 func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Context, requestInfo *abs.RequestInformation, spanForAttributes trace.Span) (*nethttp.Request, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "getRequestFromRequestInformation")
 	defer span.End()
@@ -243,7 +258,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 	}
 	if len(requestInfo.Content) > 0 {
 		reader := bytes.NewReader(requestInfo.Content)
-		request.Body = ioutil.NopCloser(reader)
+		request.Body = NopCloser(reader)
 	}
 	if request.Header == nil {
 		request.Header = make(nethttp.Header)
