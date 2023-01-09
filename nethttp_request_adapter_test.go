@@ -40,7 +40,7 @@ func TestItRetriesOnCAEResponse(t *testing.T) {
 	request.SetUri(*uri)
 	request.Method = abs.GET
 
-	err2 := adapter.SendNoContentAsync(context.TODO(), request, nil)
+	err2 := adapter.SendNoContent(context.TODO(), request, nil)
 	assert.Nil(t, err2)
 	assert.Equal(t, 2, methodCallCount)
 }
@@ -71,7 +71,7 @@ func TestItDoesntFailOnEmptyContentType(t *testing.T) {
 	request.SetUri(*uri)
 	request.Method = abs.GET
 
-	res, err := adapter.SendAsync(context.Background(), request, nil, nil)
+	res, err := adapter.Send(context.Background(), request, nil, nil)
 	assert.Nil(t, err)
 	assert.Nil(t, res)
 }
@@ -98,7 +98,7 @@ func TestItReturnsUsableStreamOnStream(t *testing.T) {
 		request.SetUri(*uri)
 		request.Method = abs.GET
 
-		res, err2 := adapter.SendPrimitiveAsync(context.TODO(), request, "[]byte", nil)
+		res, err2 := adapter.SendPrimitive(context.TODO(), request, "[]byte", nil)
 		assert.Nil(t, err2)
 		assert.NotNil(t, res)
 		assert.Equal(t, 4, len(res.([]byte)))
@@ -126,7 +126,7 @@ func TestItReturnsNilOnStream(t *testing.T) {
 		request.SetUri(*uri)
 		request.Method = abs.GET
 
-		res, err2 := adapter.SendPrimitiveAsync(context.TODO(), request, "[]byte", nil)
+		res, err2 := adapter.SendPrimitive(context.TODO(), request, "[]byte", nil)
 		assert.Nil(t, err2)
 		assert.Nil(t, res)
 	}
@@ -153,7 +153,7 @@ func TestSendNoContentDoesntFailOnOtherCodes(t *testing.T) {
 		request.SetUri(*uri)
 		request.Method = abs.GET
 
-		err2 := adapter.SendNoContentAsync(context.TODO(), request, nil)
+		err2 := adapter.SendNoContent(context.TODO(), request, nil)
 		assert.Nil(t, err2)
 	}
 }
@@ -179,7 +179,7 @@ func TestSendReturnNilOnNoContent(t *testing.T) {
 		request.SetUri(*uri)
 		request.Method = abs.GET
 
-		res, err2 := adapter.SendAsync(context.TODO(), request, internal.MockEntityFactory, nil)
+		res, err2 := adapter.Send(context.TODO(), request, internal.MockEntityFactory, nil)
 		assert.Nil(t, err2)
 		assert.Nil(t, res)
 	}
@@ -206,7 +206,7 @@ func TestSendReturnsObjectOnContent(t *testing.T) {
 		request.SetUri(*uri)
 		request.Method = abs.GET
 
-		res, err2 := adapter.SendAsync(context.TODO(), request, internal.MockEntityFactory, nil)
+		res, err2 := adapter.Send(context.TODO(), request, internal.MockEntityFactory, nil)
 		assert.Nil(t, err2)
 		assert.Nil(t, res)
 	}
@@ -240,7 +240,7 @@ func TestResponseHandlerIsCalledWhenProvided(t *testing.T) {
 
 	request.AddRequestOptions([]abs.RequestOption{handlerOption})
 
-	err = adapter.SendNoContentAsync(context.Background(), request, nil)
+	err = adapter.SendNoContent(context.Background(), request, nil)
 	assert.Nil(t, err)
 	assert.Equal(t, 2, count)
 }
