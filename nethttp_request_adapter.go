@@ -124,7 +124,7 @@ func (a *NetHttpRequestAdapter) getHttpResponseMessage(ctx context.Context, requ
 		ctx = context.Background()
 	}
 	a.setBaseUrlForRequestInformation(requestInfo)
-	additionalContext := make(map[string]interface{})
+	additionalContext := make(map[string]any)
 	if claims != "" {
 		additionalContext[claimsKey] = claims
 	}
@@ -232,9 +232,25 @@ func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo 
 	return ctx
 }
 
+// ConvertToNativeRequest converts the given RequestInformation into a native HTTP request.
+func (a *NetHttpRequestAdapter) ConvertToNativeRequest(context context.Context, requestInfo *abs.RequestInformation) (any, error) {
+	err := a.authenticationProvider.AuthenticateRequest(context, requestInfo, nil)
+	if err != nil {
+		return nil, err
+	}
+	request, err := a.getRequestFromRequestInformation(context, requestInfo, nil)
+	if err != nil {
+		return nil, err
+	}
+	return request, nil
+}
+
 func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Context, requestInfo *abs.RequestInformation, spanForAttributes trace.Span) (*nethttp.Request, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "getRequestFromRequestInformation")
 	defer span.End()
+	if spanForAttributes == nil {
+		spanForAttributes = span
+	}
 	spanForAttributes.SetAttributes(attribute.String("http.method", requestInfo.Method.String()))
 	uri, err := requestInfo.GetUri()
 	if err != nil {
@@ -298,13 +314,13 @@ func (a *NetHttpRequestAdapter) startTracingSpan(ctx context.Context, requestInf
 	return ctx, span
 }
 
-// SendAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model.
-func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, errorMappings abs.ErrorMappings) (absser.Parsable, error) {
+// Send executes the HTTP request specified by the given RequestInformation and returns the deserialized response model.
+func (a *NetHttpRequestAdapter) Send(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, errorMappings abs.ErrorMappings) (absser.Parsable, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
 	ctx = a.prepareContext(ctx, requestInfo)
-	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendAsync")
+	ctx, span := a.startTracingSpan(ctx, requestInfo, "Send")
 	defer span.End()
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "", span)
 	if err != nil {
@@ -349,19 +365,19 @@ func (a *NetHttpRequestAdapter) SendAsync(ctx context.Context, requestInfo *abs.
 	}
 }
 
-func (a *NetHttpRequestAdapter) setResponseType(result interface{}, span trace.Span) {
+func (a *NetHttpRequestAdapter) setResponseType(result any, span trace.Span) {
 	if result != nil {
 		span.SetAttributes(attribute.String("com.microsoft.kiota.response.type", reflect.TypeOf(result).String()))
 	}
 }
 
-// SendEnumAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model.
-func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, errorMappings abs.ErrorMappings) (interface{}, error) {
+// SendEnum executes the HTTP request specified by the given RequestInformation and returns the deserialized response model.
+func (a *NetHttpRequestAdapter) SendEnum(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, errorMappings abs.ErrorMappings) (any, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
 	ctx = a.prepareContext(ctx, requestInfo)
-	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendEnumAsync")
+	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendEnum")
 	defer span.End()
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "", span)
 	if err != nil {
@@ -406,13 +422,13 @@ func (a *NetHttpRequestAdapter) SendEnumAsync(ctx context.Context, requestInfo *
 	}
 }
 
-// SendCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
-func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, errorMappings abs.ErrorMappings) ([]absser.Parsable, error) {
+// SendCollection executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
+func (a *NetHttpRequestAdapter) SendCollection(ctx context.Context, requestInfo *abs.RequestInformation, constructor absser.ParsableFactory, errorMappings abs.ErrorMappings) ([]absser.Parsable, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
 	ctx = a.prepareContext(ctx, requestInfo)
-	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendCollectionAsync")
+	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendCollection")
 	defer span.End()
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "", span)
 	if err != nil {
@@ -457,13 +473,13 @@ func (a *NetHttpRequestAdapter) SendCollectionAsync(ctx context.Context, request
 	}
 }
 
-// SendEnumCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
-func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, errorMappings abs.ErrorMappings) ([]interface{}, error) {
+// SendEnumCollection executes the HTTP request specified by the given RequestInformation and returns the deserialized response model collection.
+func (a *NetHttpRequestAdapter) SendEnumCollection(ctx context.Context, requestInfo *abs.RequestInformation, parser absser.EnumFactory, errorMappings abs.ErrorMappings) ([]any, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
 	ctx = a.prepareContext(ctx, requestInfo)
-	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendEnumCollectionAsync")
+	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendEnumCollection")
 	defer span.End()
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "", span)
 	if err != nil {
@@ -478,7 +494,7 @@ func (a *NetHttpRequestAdapter) SendEnumCollectionAsync(ctx context.Context, req
 			span.RecordError(err)
 			return nil, err
 		}
-		return result.([]interface{}), nil
+		return result.([]any), nil
 	} else if response != nil {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
@@ -516,13 +532,13 @@ func getResponseHandler(ctx context.Context) abs.ResponseHandler {
 	return nil
 }
 
-// SendPrimitiveAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model.
-func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, errorMappings abs.ErrorMappings) (interface{}, error) {
+// SendPrimitive executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model.
+func (a *NetHttpRequestAdapter) SendPrimitive(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, errorMappings abs.ErrorMappings) (any, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
 	ctx = a.prepareContext(ctx, requestInfo)
-	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendPrimitiveAsync")
+	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendPrimitive")
 	defer span.End()
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "", span)
 	if err != nil {
@@ -566,7 +582,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 		}
 		_, deserializeSpan := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "Get"+typeName+"Value")
 		defer deserializeSpan.End()
-		var result interface{}
+		var result any
 		switch typeName {
 		case "string":
 			result, err = parseNode.GetStringValue()
@@ -597,13 +613,13 @@ func (a *NetHttpRequestAdapter) SendPrimitiveAsync(ctx context.Context, requestI
 	}
 }
 
-// SendPrimitiveCollectionAsync executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model collection.
-func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, errorMappings abs.ErrorMappings) ([]interface{}, error) {
+// SendPrimitiveCollection executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model collection.
+func (a *NetHttpRequestAdapter) SendPrimitiveCollection(ctx context.Context, requestInfo *abs.RequestInformation, typeName string, errorMappings abs.ErrorMappings) ([]any, error) {
 	if requestInfo == nil {
 		return nil, errors.New("requestInfo cannot be nil")
 	}
 	ctx = a.prepareContext(ctx, requestInfo)
-	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendPrimitiveCollectionAsync")
+	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendPrimitiveCollection")
 	defer span.End()
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "", span)
 	if err != nil {
@@ -618,7 +634,7 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 			span.RecordError(err)
 			return nil, err
 		}
-		return result.([]interface{}), nil
+		return result.([]any), nil
 	} else if response != nil {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
@@ -648,13 +664,13 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollectionAsync(ctx context.Context
 	}
 }
 
-// SendNoContentAsync executes the HTTP request specified by the given RequestInformation with no return content.
-func (a *NetHttpRequestAdapter) SendNoContentAsync(ctx context.Context, requestInfo *abs.RequestInformation, errorMappings abs.ErrorMappings) error {
+// SendNoContent executes the HTTP request specified by the given RequestInformation with no return content.
+func (a *NetHttpRequestAdapter) SendNoContent(ctx context.Context, requestInfo *abs.RequestInformation, errorMappings abs.ErrorMappings) error {
 	if requestInfo == nil {
 		return errors.New("requestInfo cannot be nil")
 	}
 	ctx = a.prepareContext(ctx, requestInfo)
-	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendNoContentAsync")
+	ctx, span := a.startTracingSpan(ctx, requestInfo, "SendNoContent")
 	defer span.End()
 	response, err := a.getHttpResponseMessage(ctx, requestInfo, "", span)
 	if err != nil {
