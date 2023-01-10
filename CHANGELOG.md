@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [0.12.0] - 2023-01-05
+
+### Added
+
+- Added User Agent handler to add the library information as a product to the header.
+
 ## [0.11.0] - 2022-12-20
 
 ### Changed
