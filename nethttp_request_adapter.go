@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/microsoft/kiota-abstractions-go/store"
 	"io"
 	"io/ioutil"
 	nethttp "net/http"
@@ -103,8 +104,12 @@ func (a *NetHttpRequestAdapter) GetSerializationWriterFactory() absser.Serializa
 }
 
 // EnableBackingStore enables the backing store proxies for the SerializationWriters and ParseNodes in use.
-func (a *NetHttpRequestAdapter) EnableBackingStore() {
-	//TODO implement when backing store is available for go
+func (a *NetHttpRequestAdapter) EnableBackingStore(factory store.BackingStoreFactory) {
+	a.parseNodeFactory = abs.EnableBackingStoreForParseNodeFactory(a.parseNodeFactory)
+	a.serializationWriterFactory = abs.EnableBackingStoreForSerializationWriterFactory(a.serializationWriterFactory)
+	if factory != nil {
+		store.SetDefaultBackingStoreInstance(factory)
+	}
 }
 
 // SetBaseUrl sets the base url for every request.
