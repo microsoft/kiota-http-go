@@ -108,7 +108,7 @@ func (a *NetHttpRequestAdapter) EnableBackingStore(factory store.BackingStoreFac
 	a.parseNodeFactory = abs.EnableBackingStoreForParseNodeFactory(a.parseNodeFactory)
 	a.serializationWriterFactory = abs.EnableBackingStoreForSerializationWriterFactory(a.serializationWriterFactory)
 	if factory != nil {
-		store.SetDefaultBackingStoreInstance(factory)
+		store.BackingStoreFactoryInstance = factory
 	}
 }
 
