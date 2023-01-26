@@ -20,6 +20,26 @@ func (e *MockParseNodeFactory) GetRootParseNode(contentType string, content []by
 type MockParseNode struct {
 }
 
+func (e *MockParseNode) GetOnBeforeAssignFieldValues() absser.ParsableAction {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (e *MockParseNode) SetOnBeforeAssignFieldValues(action absser.ParsableAction) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (e *MockParseNode) GetOnAfterAssignFieldValues() absser.ParsableAction {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (e *MockParseNode) SetOnAfterAssignFieldValues(action absser.ParsableAction) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (*MockParseNode) GetRawValue() (interface{}, error) {
 	return nil, nil
 }
