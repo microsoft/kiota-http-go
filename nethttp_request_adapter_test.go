@@ -9,6 +9,7 @@ import (
 
 	abs "github.com/microsoft/kiota-abstractions-go"
 	absauth "github.com/microsoft/kiota-abstractions-go/authentication"
+	absstore "github.com/microsoft/kiota-abstractions-go/store"
 	"github.com/microsoft/kiota-http-go/internal"
 
 	"github.com/stretchr/testify/assert"
@@ -243,4 +244,18 @@ func TestResponseHandlerIsCalledWhenProvided(t *testing.T) {
 	err = adapter.SendNoContent(context.Background(), request, nil)
 	assert.Nil(t, err)
 	assert.Equal(t, 2, count)
+}
+
+func TestNetHttpRequestAdapter_EnableBackingStore(t *testing.T) {
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.NoError(t, err)
+
+	var store = func() absstore.BackingStore {
+		return nil
+	}
+
+	assert.NotEqual(t, absstore.BackingStoreFactoryInstance(), store())
+	adapter.EnableBackingStore(store)
+	assert.Equal(t, absstore.BackingStoreFactoryInstance(), store())
 }
