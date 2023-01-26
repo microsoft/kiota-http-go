@@ -23,5 +23,5 @@ jobs:
         run: go build
         working-directory: ${{ env.relativePath }}
       - name: Test project
-        run: go test
+        run: go test ./...
         working-directory: ${{ env.relativePath }}
