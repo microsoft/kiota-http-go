@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [0.15.0] - 2023-01-25
+
+### Added
+
+- Added UrlReplaceHandler that replaces segments of the URL.
+
 ## [0.14.0] - 2023-01-25
 
 ### Added
