@@ -761,7 +761,8 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 	if errorCtor == nil {
 		spanForAttributes.SetAttributes(attribute.Bool(ErrorMappingFoundAttributeName, false))
 		err := &abs.ApiError{
-			Message: "The server returned an unexpected status code and no error factory is registered for this code: " + statusAsString,
+			Message:            "The server returned an unexpected status code and no error factory is registered for this code: " + statusAsString,
+			ResponseStatusCode: response.StatusCode,
 		}
 		spanForAttributes.RecordError(err)
 		return err
@@ -776,7 +777,8 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 	if rootNode == nil {
 		spanForAttributes.SetAttributes(attribute.Bool(ErrorBodyFoundAttributeName, false))
 		err := &abs.ApiError{
-			Message: "The server returned an unexpected status code with no response body: " + statusAsString,
+			Message:            "The server returned an unexpected status code with no response body: " + statusAsString,
+			ResponseStatusCode: response.StatusCode,
 		}
 		spanForAttributes.RecordError(err)
 		return err
@@ -791,7 +793,8 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 		return err
 	} else if errValue == nil {
 		return &abs.ApiError{
-			Message: "The server returned an unexpected status code but the error could not be deserialized: " + statusAsString,
+			Message:            "The server returned an unexpected status code but the error could not be deserialized: " + statusAsString,
+			ResponseStatusCode: response.StatusCode,
 		}
 	}
 
