@@ -790,6 +790,10 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 	errValue, err := rootNode.GetObjectValue(errorCtor)
 	if err != nil {
 		spanForAttributes.RecordError(err)
+		if apiError, ok := err.(*abs.ApiError); ok {
+			apiError.ResponseStatusCode = response.StatusCode
+			return apiError
+		}
 		return err
 	} else if errValue == nil {
 		return &abs.ApiError{
