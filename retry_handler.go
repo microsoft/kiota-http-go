@@ -152,6 +152,7 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 		select {
 		case <-ctx.Done():
 			// Return without retrying if the context was cancelled.
+			return nil, ctx.Err()
 
 			// Leaving this case empty causes it to exit the switch-block.
 		case <-t.C:
