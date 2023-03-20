@@ -148,12 +148,18 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 			defer span.End()
 			req = req.WithContext(ctx)
 		}
-		time.Sleep(delay)
-		response, err := pipeline.Next(req, middlewareIndex)
-		if err != nil {
-			return response, err
+		t := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			// Return without retrying if the context was cancelled.
+			return nil, ctx.Err()
+		case <-t.C:
+			response, err := pipeline.Next(req, middlewareIndex)
+			if err != nil {
+				return response, err
+			}
+			return middleware.retryRequest(ctx, pipeline, middlewareIndex, options, req, response, executionCount, cumulativeDelay, observabilityName)
 		}
-		return middleware.retryRequest(ctx, pipeline, middlewareIndex, options, req, response, executionCount, cumulativeDelay, observabilityName)
 	}
 	return resp, nil
 }
