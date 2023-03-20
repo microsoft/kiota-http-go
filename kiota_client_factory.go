@@ -70,7 +70,7 @@ func getDefaultClientWithoutMiddleware() *nethttp.Client {
 		CheckRedirect: func(req *nethttp.Request, via []*nethttp.Request) error {
 			return nethttp.ErrUseLastResponse
 		},
-		Timeout: time.Second * 30,
+		Timeout: time.Second * 100,
 	}
 }
 

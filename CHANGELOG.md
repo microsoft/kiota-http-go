@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+## [0.16.1] - 2023-03-20
+
+### Added
+
+- Context deadline for requests defaults to client timeout when not provided.
+
 ## [0.16.0] - 2023-03-01
 
 ### Added
