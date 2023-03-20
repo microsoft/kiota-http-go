@@ -4,7 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	abs "github.com/microsoft/kiota-abstractions-go"
+	absauth "github.com/microsoft/kiota-abstractions-go/authentication"
+	absser "github.com/microsoft/kiota-abstractions-go/serialization"
 	"github.com/microsoft/kiota-abstractions-go/store"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"io"
 	"io/ioutil"
 	nethttp "net/http"
@@ -12,15 +19,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
-
-	abs "github.com/microsoft/kiota-abstractions-go"
-	absauth "github.com/microsoft/kiota-abstractions-go/authentication"
-	absser "github.com/microsoft/kiota-abstractions-go/serialization"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // nopCloser is an alternate io.nopCloser implementation which
@@ -211,15 +209,13 @@ func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs
 	requestInfo.PathParameters["baseurl"] = a.GetBaseUrl()
 }
 
-const requestTimeOutInSeconds = 100
-
 func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo *abs.RequestInformation) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	// set deadline if not set in receiving context
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
-		ctx, _ = context.WithTimeout(ctx, time.Second*requestTimeOutInSeconds)
+		ctx, _ = context.WithTimeout(ctx, a.httpClient.Timeout)
 	}
 
 	for _, value := range requestInfo.GetRequestOptions() {
