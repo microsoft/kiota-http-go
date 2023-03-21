@@ -148,7 +148,15 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 			defer span.End()
 			req = req.WithContext(ctx)
 		}
-		time.Sleep(delay)
+		t := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			// Return without retrying if the context was cancelled.
+			return nil, ctx.Err()
+
+			// Leaving this case empty causes it to exit the switch-block.
+		case <-t.C:
+		}
 		response, err := pipeline.Next(req, middlewareIndex)
 		if err != nil {
 			return response, err

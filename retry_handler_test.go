@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"context"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	testing "testing"
@@ -103,6 +104,61 @@ func TestItHonoursMaxRetries(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, 429, resp.StatusCode)
 	assert.Equal(t, defaultMaxRetries, retryAttemptInt)
+}
+
+func TestItHonoursContextExpiry(t *testing.T) {
+	retryAttemptInt := -1
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.Header().Set("Retry-After", "5")
+		res.WriteHeader(429)
+		retryAttemptInt++
+		res.Write([]byte("body"))
+	}))
+	defer func() { testServer.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, testServer.URL, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	start := time.Now()
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	end := time.Now()
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	// Should not have retried because context expired.
+	assert.Equal(t, 0, retryAttemptInt)
+	assert.Less(t, end.Sub(start), 4*time.Second)
+}
+
+func TestItHonoursContextCancelled(t *testing.T) {
+	retryAttemptInt := -1
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.Header().Set("Retry-After", "5")
+		res.WriteHeader(429)
+		retryAttemptInt++
+		res.Write([]byte("body"))
+	}))
+	defer func() { testServer.Close() }()
+	ctx, cancel := context.WithCancel(context.Background())
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, testServer.URL, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	go func() {
+		time.Sleep(1 * time.Second)
+		cancel()
+	}()
+	start := time.Now()
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	end := time.Now()
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	// Should not have retried because context expired.
+	assert.Equal(t, 0, retryAttemptInt)
+	assert.Less(t, end.Sub(start), 4*time.Second)
 }
 
 func TestItDoesntRetryOnSuccess(t *testing.T) {
