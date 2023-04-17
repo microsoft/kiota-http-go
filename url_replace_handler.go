@@ -10,21 +10,31 @@ import (
 )
 
 var urlReplaceOptionKey = abstractions.RequestOptionKey{Key: "UrlReplaceOptionKey"}
-var ReplacementPairs = map[string]string{"/users/me-token-to-replace": "/me"}
 
 // UrlReplaceHandler is a middleware handler that replaces url segments in the uri path.
 type UrlReplaceHandler struct {
 	options UrlReplaceOptions
 }
 
+// NewUrlReplaceHandler creates a configuration object for the CompressionHandler
+func NewUrlReplaceHandler(enabled bool, replacementPairs map[string]string) *UrlReplaceHandler {
+	return &UrlReplaceHandler{UrlReplaceOptions{Enabled: enabled, ReplacementPairs: replacementPairs}}
+}
+
 // UrlReplaceOptions is a configuration object for the UrlReplaceHandler middleware
 type UrlReplaceOptions struct {
-	Enabled bool
+	Enabled          bool
+	ReplacementPairs map[string]string
 }
 
 // GetKey returns UrlReplaceOptions unique name in context object
 func (u *UrlReplaceOptions) GetKey() abstractions.RequestOptionKey {
 	return urlReplaceOptionKey
+}
+
+// GetReplacementPairs reads ReplacementPairs settings from UrlReplaceOptions
+func (u *UrlReplaceOptions) GetReplacementPairs() map[string]string {
+	return u.ReplacementPairs
 }
 
 // IsEnabled reads Enabled setting from UrlReplaceOptions
@@ -35,11 +45,7 @@ func (u *UrlReplaceOptions) IsEnabled() bool {
 type urlReplaceOptionsInt interface {
 	abstractions.RequestOption
 	IsEnabled() bool
-}
-
-// NewUrlReplaceHandler creates an instance of a urlReplace middleware
-func NewUrlReplaceHandler() *UrlReplaceHandler {
-	return &UrlReplaceHandler{UrlReplaceOptions{Enabled: true}}
+	GetReplacementPairs() map[string]string
 }
 
 // Intercept is invoked by the middleware pipeline to either move the request/response
@@ -60,11 +66,11 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 		req = req.WithContext(ctx)
 	}
 
-	if !reqOption.IsEnabled() || len(ReplacementPairs) == 0 {
+	if !reqOption.IsEnabled() || len(reqOption.GetReplacementPairs()) == 0 {
 		return pipeline.Next(req, middlewareIndex)
 	}
 
-	req.URL.Path = ReplacePathTokens(req.URL.Path, ReplacementPairs)
+	req.URL.Path = ReplacePathTokens(req.URL.Path, reqOption.GetReplacementPairs())
 
 	if span != nil {
 		span.SetAttributes(attribute.String("http.request_url", req.RequestURI))
