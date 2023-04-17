@@ -64,24 +64,13 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 		return pipeline.Next(req, middlewareIndex)
 	}
 
-	err := c.replaceTokens(req, ReplacementPairs)
-	if err != nil {
-		if span != nil {
-			span.RecordError(err)
-		}
-		return nil, err
-	}
+	req.URL.Path = ReplacePathTokens(req.URL.Path, ReplacementPairs)
 
 	if span != nil {
 		span.SetAttributes(attribute.String("http.request_url", req.RequestURI))
 	}
 
 	return pipeline.Next(req, middlewareIndex)
-}
-
-func (c *UrlReplaceHandler) replaceTokens(request *http.Request, replacementPairs map[string]string) error {
-	request.URL.Path = ReplacePathTokens(request.URL.Path, replacementPairs)
-	return nil
 }
 
 // ReplacePathTokens invokes token replacement logic on the given url path
