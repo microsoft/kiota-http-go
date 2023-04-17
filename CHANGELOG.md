@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Adds exported method `ReplacePathTokens` that can be used to process url replacement logic globally .
+- Exit retry handler earlier if context is done.
+- Adds exported method `ReplacePathTokens` that can be used to process url replacement logic globally.
 
 ## [0.16.1] - 2023-03-20
 
