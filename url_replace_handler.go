@@ -10,6 +10,7 @@ import (
 )
 
 var urlReplaceOptionKey = abstractions.RequestOptionKey{Key: "UrlReplaceOptionKey"}
+var ReplacementPairs = map[string]string{"/users/me-token-to-replace": "/me"}
 
 // UrlReplaceHandler is a middleware handler that replaces url segments in the uri path.
 type UrlReplaceHandler struct {
@@ -18,8 +19,7 @@ type UrlReplaceHandler struct {
 
 // UrlReplaceOptions is a configuration object for the UrlReplaceHandler middleware
 type UrlReplaceOptions struct {
-	Enabled          bool
-	ReplacementPairs map[string]string
+	Enabled bool
 }
 
 // GetKey returns UrlReplaceOptions unique name in context object
@@ -32,25 +32,14 @@ func (u *UrlReplaceOptions) IsEnabled() bool {
 	return u.Enabled
 }
 
-// GetReplacementPairs reads ReplacementPairs settings from UrlReplaceOptions
-func (u *UrlReplaceOptions) GetReplacementPairs() map[string]string {
-	return u.ReplacementPairs
-}
-
 type urlReplaceOptionsInt interface {
 	abstractions.RequestOption
 	IsEnabled() bool
-	GetReplacementPairs() map[string]string
 }
 
 // NewUrlReplaceHandler creates an instance of a urlReplace middleware
 func NewUrlReplaceHandler() *UrlReplaceHandler {
-	return NewUrlReplaceHandlerWithOption(true, map[string]string{"/users/me-token-to-replace": "/me"})
-}
-
-// NewUrlReplaceHandlerWithOption creates a configuration object for the CompressionHandler
-func NewUrlReplaceHandlerWithOption(enabled bool, replacementPairs map[string]string) *UrlReplaceHandler {
-	return &UrlReplaceHandler{UrlReplaceOptions{Enabled: enabled, ReplacementPairs: replacementPairs}}
+	return &UrlReplaceHandler{UrlReplaceOptions{Enabled: true}}
 }
 
 // Intercept is invoked by the middleware pipeline to either move the request/response
@@ -71,11 +60,11 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 		req = req.WithContext(ctx)
 	}
 
-	if !reqOption.IsEnabled() || len(reqOption.GetReplacementPairs()) == 0 {
+	if !reqOption.IsEnabled() || len(ReplacementPairs) == 0 {
 		return pipeline.Next(req, middlewareIndex)
 	}
 
-	err := c.replaceTokens(req, reqOption.GetReplacementPairs())
+	err := c.replaceTokens(req, ReplacementPairs)
 	if err != nil {
 		if span != nil {
 			span.RecordError(err)
@@ -91,12 +80,14 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 }
 
 func (c *UrlReplaceHandler) replaceTokens(request *http.Request, replacementPairs map[string]string) error {
+	request.URL.Path = ReplacePathTokens(request.URL.Path, replacementPairs)
+	return nil
+}
 
-	path := request.URL.Path
+// ReplacePathTokens invokes token replacement logic on the given url path
+func ReplacePathTokens(path string, replacementPairs map[string]string) string {
 	for key, value := range replacementPairs {
 		path = strings.Replace(path, key, value, 1)
 	}
-
-	request.URL.Path = path
-	return nil
+	return path
 }
