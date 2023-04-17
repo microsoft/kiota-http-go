@@ -27,7 +27,7 @@ func (pipeline *SpyPipeline) GetReceivedRequest() *nethttp.Request {
 
 func TestURLReplacementHandler(t *testing.T) {
 
-	handler := NewUrlReplaceHandler()
+	handler := NewUrlReplaceHandler(true, map[string]string{"/users/me-token-to-replace": "/me"})
 	if handler == nil {
 		t.Error("handler is nil")
 	}

@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.16.2] - 2023-04-17
+
+### Added
+
+- Exit retry handler earlier if context is done.
+- Adds exported method `ReplacePathTokens` that can be used to process url replacement logic globally.
+
 ## [0.16.1] - 2023-03-20
 
 ### Added
