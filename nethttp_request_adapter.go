@@ -4,6 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"io/ioutil"
+	nethttp "net/http"
+	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
+
 	abs "github.com/microsoft/kiota-abstractions-go"
 	absauth "github.com/microsoft/kiota-abstractions-go/authentication"
 	absser "github.com/microsoft/kiota-abstractions-go/serialization"
@@ -12,13 +20,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"io"
-	"io/ioutil"
-	nethttp "net/http"
-	"reflect"
-	"regexp"
-	"strconv"
-	"strings"
 )
 
 // nopCloser is an alternate io.nopCloser implementation which
@@ -743,6 +744,12 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 	spanForAttributes.SetStatus(codes.Error, "received_error_response")
 
 	statusAsString := strconv.Itoa(response.StatusCode)
+	responseHeaders := abs.NewResponseHeaders()
+	for key, values := range response.Header {
+		for i := range values {
+			responseHeaders.Add(key, values[i])
+		}
+	}
 	var errorCtor absser.ParsableFactory = nil
 	if len(errorMappings) != 0 {
 		if errorMappings[statusAsString] != nil {
@@ -759,6 +766,7 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 		err := &abs.ApiError{
 			Message:            "The server returned an unexpected status code and no error factory is registered for this code: " + statusAsString,
 			ResponseStatusCode: response.StatusCode,
+			ResponseHeaders:    responseHeaders,
 		}
 		spanForAttributes.RecordError(err)
 		return err
@@ -775,6 +783,7 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 		err := &abs.ApiError{
 			Message:            "The server returned an unexpected status code with no response body: " + statusAsString,
 			ResponseStatusCode: response.StatusCode,
+			ResponseHeaders:    responseHeaders,
 		}
 		spanForAttributes.RecordError(err)
 		return err
@@ -788,12 +797,14 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 		spanForAttributes.RecordError(err)
 		if apiError, ok := err.(*abs.ApiError); ok {
 			apiError.ResponseStatusCode = response.StatusCode
+			apiError.ResponseHeaders = responseHeaders
 		}
 		return err
 	} else if errValue == nil {
 		return &abs.ApiError{
 			Message:            "The server returned an unexpected status code but the error could not be deserialized: " + statusAsString,
 			ResponseStatusCode: response.StatusCode,
+			ResponseHeaders:    responseHeaders,
 		}
 	}
 
