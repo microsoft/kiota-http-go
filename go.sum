@@ -15,8 +15,6 @@ github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
 github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
-github.com/microsoft/kiota-abstractions-go v0.19.1 h1:ybfIK4xlTqzKW2aO6J5pd1wMjHA17huFsUaY5LOWHoM=
-github.com/microsoft/kiota-abstractions-go v0.19.1/go.mod h1:0lbPErVO6Rj3HHpntNYW/OFmHhJJ1ewPdsi1xPxYIMc=
 github.com/microsoft/kiota-abstractions-go v0.20.0 h1:d1p+aW6RhKMRgjdZZ2wKMwfYcDXhmXvPD8JDIeYB/5c=
 github.com/microsoft/kiota-abstractions-go v0.20.0/go.mod h1:0lbPErVO6Rj3HHpntNYW/OFmHhJJ1ewPdsi1xPxYIMc=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
