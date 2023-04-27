@@ -46,6 +46,35 @@ func TestItRetriesOnCAEResponse(t *testing.T) {
 	assert.Equal(t, 2, methodCallCount)
 }
 
+func TestItThrowsApiError(t *testing.T) {
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.Header().Set("client-request-id", "example-guid")
+		res.WriteHeader(500)
+		res.Write([]byte("body"))
+	}))
+	defer func() { testServer.Close() }()
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.Nil(t, err)
+	assert.NotNil(t, adapter)
+
+	uri, err := url.Parse(testServer.URL)
+	assert.Nil(t, err)
+	assert.NotNil(t, uri)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	err2 := adapter.SendNoContent(context.TODO(), request, nil)
+	assert.NotNil(t, err2)
+	apiError, ok := err2.(*abs.ApiError)
+	if !ok {
+		t.Fail()
+	}
+	assert.Equal(t, 500, apiError.ResponseStatusCode)
+	assert.Equal(t, "example-guid", apiError.ResponseHeaders.Get("client-request-id")[0])
+}
+
 func TestImplementationHonoursInterface(t *testing.T) {
 	authProvider := &absauth.AnonymousAuthenticationProvider{}
 	adapter, err := NewNetHttpRequestAdapter(authProvider)
