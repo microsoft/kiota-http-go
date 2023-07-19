@@ -110,5 +110,6 @@ func TestItStripsAuthorizationHeaderOnDifferentHost(t *testing.T) {
 		t.Error(err)
 	}
 	assert.NotNil(t, result)
+	assert.Equal(t, "www.bing.com", result.Host)
 	assert.Equal(t, "", result.Header.Get("Authorization"))
 }
