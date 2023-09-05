@@ -10,7 +10,7 @@ jobs:
       name: gh_releases
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Release
         uses: anton-yurchenko/git-release@v5.0
         env:
