@@ -3,7 +3,7 @@ module github.com/microsoft/kiota-http-go
 go 1.18
 
 require (
-	github.com/google/uuid v1.3.1
+	github.com/google/uuid v1.4.0
 	github.com/microsoft/kiota-abstractions-go v1.3.0
 	github.com/stretchr/testify v1.8.4
 	go.opentelemetry.io/otel v1.19.0
