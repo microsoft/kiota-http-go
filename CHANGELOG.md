@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [1.1.1] - 2023-11-22
+
+### Added
+
+- Added response headers and status code to returned error in `throwIfFailedResponse`.
+
 ## [1.1.0] - 2023-08-11
 
 ### Added
