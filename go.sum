@@ -14,12 +14,12 @@ github.com/google/uuid v1.4.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
 github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
-github.com/microsoft/kiota-abstractions-go v1.5.0 h1:CD36eKsJ6NZLLu6LS5UqDPApIkrZEq2L7E0Uw/CTKzc=
-github.com/microsoft/kiota-abstractions-go v1.5.0/go.mod h1:NRJnAFg8qqOoX/VQWTe3ZYmcIbLa20LNC+eTqO2j60U=
+github.com/microsoft/kiota-abstractions-go v1.5.1 h1:MD/WiDEc68TMYyjAmyxKH4u6OU+gegMK82ht73dz98g=
+github.com/microsoft/kiota-abstractions-go v1.5.1/go.mod h1:xyBzTVCYrp7QBW4/p+RFi44PHwp/IPn2dZepuV4nF80=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/std-uritemplate/std-uritemplate/go v0.0.46 h1:rWcEym/hz9YhPTXJELTXfrq48lTx69jNVhv+dOMmyZY=
-github.com/std-uritemplate/std-uritemplate/go v0.0.46/go.mod h1:Qov4Ay4U83j37XjgxMYevGJFLbnZ2o9cEOhGufBKgKY=
+github.com/std-uritemplate/std-uritemplate/go v0.0.47 h1:erzz/DR4sOzWr0ca2MgSTkMckpLEsDySaTZwVFQq9zw=
+github.com/std-uritemplate/std-uritemplate/go v0.0.47/go.mod h1:Qov4Ay4U83j37XjgxMYevGJFLbnZ2o9cEOhGufBKgKY=
 github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 go.opentelemetry.io/otel v1.21.0 h1:hzLeKBZEL7Okw2mGzZ0cc4k/A7Fta0uoPgaJCr8fsFc=
