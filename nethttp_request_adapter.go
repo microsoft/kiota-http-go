@@ -795,9 +795,9 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 	errValue, err := rootNode.GetObjectValue(errorCtor)
 	if err != nil {
 		spanForAttributes.RecordError(err)
-		if apiError, ok := err.(*abs.ApiError); ok {
-			apiError.ResponseStatusCode = response.StatusCode
-			apiError.ResponseHeaders = responseHeaders
+		if apiErrorable, ok := errValue.(abs.ApiErrorable); ok {
+			apiErrorable.SetResponseHeaders(responseHeaders)
+			apiErrorable.SetStatusCode(response.StatusCode)
 		}
 		return err
 	} else if errValue == nil {
