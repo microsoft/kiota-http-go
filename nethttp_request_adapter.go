@@ -808,7 +808,13 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 		}
 	}
 
+	if apiErrorable, ok := errValue.(abs.ApiErrorable); ok {
+		apiErrorable.SetResponseHeaders(responseHeaders)
+		apiErrorable.SetStatusCode(response.StatusCode)
+	}
+
 	err = errValue.(error)
+
 	spanForAttributes.RecordError(err)
 	return err
 }
