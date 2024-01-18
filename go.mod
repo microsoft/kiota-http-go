@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/google/uuid v1.5.0
-	github.com/microsoft/kiota-abstractions-go v1.5.4
+	github.com/microsoft/kiota-abstractions-go v1.5.5
 	github.com/stretchr/testify v1.8.4
 	go.opentelemetry.io/otel v1.22.0
 	go.opentelemetry.io/otel/trace v1.22.0
