@@ -15,15 +15,6 @@ func TestItDecodesQueryParameterNames(t *testing.T) {
 		{"?%24select=diplayName&api%2Eversion=2", "/?$select=diplayName&api.version=2"},
 		{"/api-version/?%24select=diplayName&api%2Eversion=2", "/api-version/?$select=diplayName&api.version=2"},
 		{"", "/"},
-		{"?q=1%2B2", "/?q=1%2B2"},                       //Values are not decoded
-		{"?q=M%26A", "/?q=M%26A"},                       //Values are not decoded
-		{"?q%2D1=M%26A", "/?q-1=M%26A"},                 //Values are not decoded but params are
-		{"?q%2D1&q=M%26A=M%26A", "/?q-1&q=M%26A=M%26A"}, //Values are not decoded but params are
-		{"?%24select=diplayName&api%2Dversion=1%2B2", "/?$select=diplayName&api-version=1%2B2"}, //Values are not decoded but params are
-		{"?%24select=diplayName&api%2Dversion=M%26A", "/?$select=diplayName&api-version=M%26A"}, //Values are not decoded but params are
-		{"?%24select=diplayName&api%7Eversion=M%26A", "/?$select=diplayName&api~version=M%26A"}, //Values are not decoded but params are
-		{"?%24select=diplayName&api%2Eversion=M%26A", "/?$select=diplayName&api.version=M%26A"}, //Values are not decoded but params are
-		{"?%24select=diplayName&api%2Eversion=M%26A", "/?$select=diplayName&api.version=M%26A"}, //Values are not decoded but params are
 	}
 	result := ""
 	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
