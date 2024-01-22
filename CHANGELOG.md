@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [1.2.0] - 2024-01-22
+
+### Added
+
+- Adds support for XXX status code.
+
 ## [1.1.1] - 2023-11-22
 
 ### Added

@@ -702,7 +702,7 @@ func (a *NetHttpRequestAdapter) SendNoContent(ctx context.Context, requestInfo *
 func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *nethttp.Response, spanForAttributes trace.Span) (absser.ParseNode, context.Context, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "getRootParseNode")
 	defer span.End()
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		spanForAttributes.RecordError(err)
 		return nil, ctx, err
@@ -754,6 +754,8 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 	if len(errorMappings) != 0 {
 		if errorMappings[statusAsString] != nil {
 			errorCtor = errorMappings[statusAsString]
+		} else if errorMappings["XXX"] != nil && response.StatusCode >= 400 && response.StatusCode < 600 {
+			errorCtor = errorMappings["XXX"]
 		} else if response.StatusCode >= 400 && response.StatusCode < 500 && errorMappings["4XX"] != nil {
 			errorCtor = errorMappings["4XX"]
 		} else if response.StatusCode >= 500 && response.StatusCode < 600 && errorMappings["5XX"] != nil {
