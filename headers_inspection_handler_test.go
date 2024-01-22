@@ -19,7 +19,7 @@ func TestHeadersInspectionOptionsImplementTheOptionInterface(t *testing.T) {
 	options := NewHeadersInspectionOptions()
 	assert.NotNil(t, options)
 	_, ok := any(options).(abs.RequestOption)
-	assert.True(t, ok, "options does not implement RequestOption")
+	assert.True(t, ok, "options does not implement optionsType")
 }
 
 func TestItGetsRequestHeaders(t *testing.T) {

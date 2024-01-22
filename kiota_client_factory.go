@@ -3,9 +3,22 @@
 package nethttplibrary
 
 import (
+	"errors"
+	abs "github.com/microsoft/kiota-abstractions-go"
 	nethttp "net/http"
 	"net/url"
 	"time"
+)
+
+type optionsType int
+
+const (
+	OptionRetryHandler optionsType = iota
+	OptionRedirectHandler
+	OptionCompressionHandler
+	OptionParametersNameDecodingHandler
+	OptionUserAgentHandler
+	OptionHeadersInspectionHandler
 )
 
 // GetClientWithProxySettings creates a new default net/http client with a proxy url and default middleware
@@ -76,12 +89,76 @@ func getDefaultClientWithoutMiddleware() *nethttp.Client {
 
 // GetDefaultMiddlewares creates a new default set of middlewares for the Kiota request adapter
 func GetDefaultMiddlewares() []Middleware {
-	return []Middleware{
-		NewRetryHandler(),
-		NewRedirectHandler(),
-		NewCompressionHandler(),
-		NewParametersNameDecodingHandler(),
-		NewUserAgentHandler(),
-		NewHeadersInspectionHandler(),
+	return getDefaultMiddleWare(make(map[optionsType]Middleware))
+}
+
+// GetDefaultMiddlewaresWithOptions creates a new default set of middlewares for the Kiota request adapter with options
+func GetDefaultMiddlewaresWithOptions(requestOptions ...abs.RequestOption) ([]Middleware, error) {
+	if len(requestOptions) == 0 {
+		return GetDefaultMiddlewares(), nil
 	}
+
+	// map of middleware options
+	middlewareMap := make(map[optionsType]Middleware)
+
+	for _, element := range requestOptions {
+		switch v := element.(type) {
+		case *RetryHandlerOptions:
+			middlewareMap[OptionRetryHandler] = NewRetryHandlerWithOptions(*v)
+		case *RedirectHandlerOptions:
+			middlewareMap[OptionRedirectHandler] = NewRedirectHandlerWithOptions(*v)
+		case *CompressionOptions:
+			middlewareMap[OptionCompressionHandler] = NewCompressionHandlerWithOptions(*v)
+		case *ParametersNameDecodingOptions:
+			middlewareMap[OptionParametersNameDecodingHandler] = NewParametersNameDecodingHandlerWithOptions(*v)
+		case *UserAgentHandlerOptions:
+			middlewareMap[OptionUserAgentHandler] = NewUserAgentHandlerWithOptions(v)
+		case *HeadersInspectionOptions:
+			middlewareMap[OptionHeadersInspectionHandler] = NewHeadersInspectionHandlerWithOptions(*v)
+		default:
+			// none of the above types
+			return nil, errors.New("unsupported option type")
+		}
+	}
+
+	middleware := getDefaultMiddleWare(middlewareMap)
+	return middleware, nil
+}
+
+// getDefaultMiddleWare creates a new default set of middlewares for the Kiota request adapter
+func getDefaultMiddleWare(middlewareMap map[optionsType]Middleware) []Middleware {
+	middlewareSource := map[optionsType]func() Middleware{
+		OptionRetryHandler: func() Middleware {
+			return NewRetryHandler()
+		},
+		OptionRedirectHandler: func() Middleware {
+			return NewRedirectHandler()
+		},
+		OptionCompressionHandler: func() Middleware {
+			return NewCompressionHandler()
+		},
+		OptionParametersNameDecodingHandler: func() Middleware {
+			return NewParametersNameDecodingHandler()
+		},
+		OptionUserAgentHandler: func() Middleware {
+			return NewUserAgentHandler()
+		},
+		OptionHeadersInspectionHandler: func() Middleware {
+			return NewHeadersInspectionHandler()
+		},
+	}
+
+	// loop over middlewareSource and add any middleware that wasn't provided in the requestOptions
+	for key, value := range middlewareSource {
+		if _, ok := middlewareMap[key]; !ok {
+			middlewareMap[key] = value()
+		}
+	}
+
+	var middleware []Middleware
+	for _, value := range middlewareMap {
+		middleware = append(middleware, value)
+	}
+
+	return middleware
 }
