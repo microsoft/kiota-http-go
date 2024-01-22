@@ -3,7 +3,7 @@ package nethttplibrary
 import (
 	"compress/gzip"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"testing"
@@ -30,7 +30,7 @@ func TestTransportDecompressesResponse(t *testing.T) {
 	client.Transport = NewCustomTransport(NewCompressionHandler())
 
 	resp, _ := client.Get(testServer.URL)
-	respBody, _ := ioutil.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(resp.Body)
 
 	assert.True(t, resp.Uncompressed)
 	assert.Equal(t, string(respBody), `{"email":"Test@Test.com","name":"Test"}`)
