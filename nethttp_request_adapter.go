@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 	nethttp "net/http"
 	"reflect"
 	"regexp"
@@ -567,7 +566,7 @@ func (a *NetHttpRequestAdapter) SendPrimitive(ctx context.Context, requestInfo *
 			return nil, nil
 		}
 		if typeName == "[]byte" {
-			res, err := ioutil.ReadAll(response.Body)
+			res, err := io.ReadAll(response.Body)
 			if err != nil {
 				span.RecordError(err)
 				return nil, err
@@ -703,7 +702,7 @@ func (a *NetHttpRequestAdapter) SendNoContent(ctx context.Context, requestInfo *
 func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *nethttp.Response, spanForAttributes trace.Span) (absser.ParseNode, context.Context, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "getRootParseNode")
 	defer span.End()
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		spanForAttributes.RecordError(err)
 		return nil, ctx, err
@@ -719,7 +718,7 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	return rootNode, ctx, err
 }
 func (a *NetHttpRequestAdapter) purge(response *nethttp.Response) error {
-	_, _ = ioutil.ReadAll(response.Body) //we don't care about errors comming from reading the body, just trying to purge anything that maybe left
+	_, _ = io.ReadAll(response.Body) //we don't care about errors comming from reading the body, just trying to purge anything that maybe left
 	err := response.Body.Close()
 	if err != nil {
 		return err

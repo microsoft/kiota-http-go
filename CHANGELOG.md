@@ -11,11 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-## [1.1.2] - 2023-01-22
+## [1.2.0] - 2023-01-22
 
 ### Changed
 
 - Fix bug passing no timeout in client as 0 timeout in context  .
+
+## [1.1.2] - 2024-01-20
+
+### Changed
+
+- Changed the code by replacing ioutil.ReadAll and ioutil.NopCloser with io.ReadAll and io.NopCloser, respectively, due to their deprecation. 
+
 
 ## [1.1.1] - 2023-11-22
 
