@@ -10,17 +10,6 @@ import (
 	"time"
 )
 
-type optionsType int
-
-const (
-	OptionRetryHandler optionsType = iota
-	OptionRedirectHandler
-	OptionCompressionHandler
-	OptionParametersNameDecodingHandler
-	OptionUserAgentHandler
-	OptionHeadersInspectionHandler
-)
-
 // GetClientWithProxySettings creates a new default net/http client with a proxy url and default middleware
 // Not providing any middleware would result in having default middleware provided
 func GetClientWithProxySettings(proxyUrlStr string, middleware ...Middleware) (*nethttp.Client, error) {
@@ -89,7 +78,7 @@ func getDefaultClientWithoutMiddleware() *nethttp.Client {
 
 // GetDefaultMiddlewares creates a new default set of middlewares for the Kiota request adapter
 func GetDefaultMiddlewares() []Middleware {
-	return getDefaultMiddleWare(make(map[optionsType]Middleware))
+	return getDefaultMiddleWare(make(map[abs.RequestOptionKey]Middleware))
 }
 
 // GetDefaultMiddlewaresWithOptions creates a new default set of middlewares for the Kiota request adapter with options
@@ -99,22 +88,22 @@ func GetDefaultMiddlewaresWithOptions(requestOptions ...abs.RequestOption) ([]Mi
 	}
 
 	// map of middleware options
-	middlewareMap := make(map[optionsType]Middleware)
+	middlewareMap := make(map[abs.RequestOptionKey]Middleware)
 
 	for _, element := range requestOptions {
 		switch v := element.(type) {
 		case *RetryHandlerOptions:
-			middlewareMap[OptionRetryHandler] = NewRetryHandlerWithOptions(*v)
+			middlewareMap[retryKeyValue] = NewRetryHandlerWithOptions(*v)
 		case *RedirectHandlerOptions:
-			middlewareMap[OptionRedirectHandler] = NewRedirectHandlerWithOptions(*v)
+			middlewareMap[redirectKeyValue] = NewRedirectHandlerWithOptions(*v)
 		case *CompressionOptions:
-			middlewareMap[OptionCompressionHandler] = NewCompressionHandlerWithOptions(*v)
+			middlewareMap[compressKey] = NewCompressionHandlerWithOptions(*v)
 		case *ParametersNameDecodingOptions:
-			middlewareMap[OptionParametersNameDecodingHandler] = NewParametersNameDecodingHandlerWithOptions(*v)
+			middlewareMap[parametersNameDecodingKeyValue] = NewParametersNameDecodingHandlerWithOptions(*v)
 		case *UserAgentHandlerOptions:
-			middlewareMap[OptionUserAgentHandler] = NewUserAgentHandlerWithOptions(v)
+			middlewareMap[userAgentKeyValue] = NewUserAgentHandlerWithOptions(v)
 		case *HeadersInspectionOptions:
-			middlewareMap[OptionHeadersInspectionHandler] = NewHeadersInspectionHandlerWithOptions(*v)
+			middlewareMap[headersInspectionKeyValue] = NewHeadersInspectionHandlerWithOptions(*v)
 		default:
 			// none of the above types
 			return nil, errors.New("unsupported option type")
@@ -126,24 +115,24 @@ func GetDefaultMiddlewaresWithOptions(requestOptions ...abs.RequestOption) ([]Mi
 }
 
 // getDefaultMiddleWare creates a new default set of middlewares for the Kiota request adapter
-func getDefaultMiddleWare(middlewareMap map[optionsType]Middleware) []Middleware {
-	middlewareSource := map[optionsType]func() Middleware{
-		OptionRetryHandler: func() Middleware {
+func getDefaultMiddleWare(middlewareMap map[abs.RequestOptionKey]Middleware) []Middleware {
+	middlewareSource := map[abs.RequestOptionKey]func() Middleware{
+		retryKeyValue: func() Middleware {
 			return NewRetryHandler()
 		},
-		OptionRedirectHandler: func() Middleware {
+		redirectKeyValue: func() Middleware {
 			return NewRedirectHandler()
 		},
-		OptionCompressionHandler: func() Middleware {
+		compressKey: func() Middleware {
 			return NewCompressionHandler()
 		},
-		OptionParametersNameDecodingHandler: func() Middleware {
+		parametersNameDecodingKeyValue: func() Middleware {
 			return NewParametersNameDecodingHandler()
 		},
-		OptionUserAgentHandler: func() Middleware {
+		userAgentKeyValue: func() Middleware {
 			return NewUserAgentHandler()
 		},
-		OptionHeadersInspectionHandler: func() Middleware {
+		headersInspectionKeyValue: func() Middleware {
 			return NewHeadersInspectionHandler()
 		},
 	}
