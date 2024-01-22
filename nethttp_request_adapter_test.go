@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"context"
+	"github.com/microsoft/kiota-abstractions-go/serialization"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"net/url"
@@ -73,6 +74,40 @@ func TestItThrowsApiError(t *testing.T) {
 	}
 	assert.Equal(t, 500, apiError.ResponseStatusCode)
 	assert.Equal(t, "example-guid", apiError.ResponseHeaders.Get("client-request-id")[0])
+}
+
+func TestGenericError(t *testing.T) {
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.WriteHeader(500)
+		res.Write([]byte("test"))
+	}))
+	defer func() { testServer.Close() }()
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapterWithParseNodeFactory(authProvider, &internal.MockParseNodeFactory{})
+	assert.Nil(t, err)
+	assert.NotNil(t, adapter)
+
+	uri, err := url.Parse(testServer.URL)
+	assert.Nil(t, err)
+	assert.NotNil(t, uri)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	result := 0
+	errorMapping := abs.ErrorMappings{
+		"XXX": func(parseNode serialization.ParseNode) (serialization.Parsable, error) {
+			result++
+			return nil, &abs.ApiError{
+				Message: "test XXX message",
+			}
+		},
+	}
+
+	_, err2 := adapter.SendPrimitive(context.TODO(), request, "[]byte", errorMapping)
+	assert.NotNil(t, err2)
+	assert.Equal(t, 1, result)
+	assert.Equal(t, "test XXX message", err2.Error())
 }
 
 func TestImplementationHonoursInterface(t *testing.T) {
