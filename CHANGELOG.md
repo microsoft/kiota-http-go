@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [1.2.1] - 2023-01-22
+
+### Changed
+
+- Fix bug passing no timeout in client as 0 timeout in context  .
+
 ## [1.2.0] - 2024-01-22
 
 ### Added
