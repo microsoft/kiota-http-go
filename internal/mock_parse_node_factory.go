@@ -57,6 +57,12 @@ func (e *MockParseNode) GetCollectionOfEnumValues(parser absser.EnumFactory) ([]
 	return nil, nil
 }
 func (e *MockParseNode) GetObjectValue(ctor absser.ParsableFactory) (absser.Parsable, error) {
+	if ctor != nil {
+		_, err := ctor(e)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &MockEntity{}, nil
 }
 func (e *MockParseNode) GetStringValue() (*string, error) {

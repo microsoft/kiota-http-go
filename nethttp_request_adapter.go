@@ -758,6 +758,8 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 			errorCtor = errorMappings["4XX"]
 		} else if response.StatusCode >= 500 && response.StatusCode < 600 && errorMappings["5XX"] != nil {
 			errorCtor = errorMappings["5XX"]
+		} else if errorMappings["XXX"] != nil && response.StatusCode >= 400 && response.StatusCode < 600 {
+			errorCtor = errorMappings["XXX"]
 		}
 	}
 
