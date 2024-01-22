@@ -215,7 +215,8 @@ func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo 
 		ctx = context.Background()
 	}
 	// set deadline if not set in receiving context
-	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
+	// ignore if timeout is 0 as it means no timeout
+	if _, deadlineSet := ctx.Deadline(); !deadlineSet && a.httpClient.Timeout != 0 {
 		ctx, _ = context.WithTimeout(ctx, a.httpClient.Timeout)
 	}
 
