@@ -754,12 +754,12 @@ func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, respo
 	if len(errorMappings) != 0 {
 		if errorMappings[statusAsString] != nil {
 			errorCtor = errorMappings[statusAsString]
-		} else if errorMappings["XXX"] != nil && response.StatusCode >= 400 && response.StatusCode < 600 {
-			errorCtor = errorMappings["XXX"]
 		} else if response.StatusCode >= 400 && response.StatusCode < 500 && errorMappings["4XX"] != nil {
 			errorCtor = errorMappings["4XX"]
 		} else if response.StatusCode >= 500 && response.StatusCode < 600 && errorMappings["5XX"] != nil {
 			errorCtor = errorMappings["5XX"]
+		} else if errorMappings["XXX"] != nil && response.StatusCode >= 400 && response.StatusCode < 600 {
+			errorCtor = errorMappings["XXX"]
 		}
 	}
 
