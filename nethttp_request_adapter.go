@@ -702,6 +702,11 @@ func (a *NetHttpRequestAdapter) SendNoContent(ctx context.Context, requestInfo *
 func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *nethttp.Response, spanForAttributes trace.Span) (absser.ParseNode, context.Context, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "getRootParseNode")
 	defer span.End()
+
+	if response.ContentLength == 0 {
+		return nil, ctx, nil
+	}
+
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		spanForAttributes.RecordError(err)
