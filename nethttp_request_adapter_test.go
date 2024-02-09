@@ -250,6 +250,35 @@ func TestSendReturnNilOnNoContent(t *testing.T) {
 	}
 }
 
+func TestSendReturnErrOnNoContent(t *testing.T) {
+	// Subset of status codes this applies to since there's many of them. This
+	// could be switched to ranges if full coverage is desired.
+	statusCodes := []int{nethttp.StatusBadRequest, nethttp.StatusInternalServerError}
+
+	for _, code := range statusCodes {
+		testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+			res.WriteHeader(code)
+		}))
+		defer func() { testServer.Close() }()
+
+		authProvider := &absauth.AnonymousAuthenticationProvider{}
+		adapter, err := NewNetHttpRequestAdapter(authProvider)
+		assert.Nil(t, err)
+		assert.NotNil(t, adapter)
+
+		uri, err := url.Parse(testServer.URL)
+		assert.Nil(t, err)
+		assert.NotNil(t, uri)
+		request := abs.NewRequestInformation()
+		request.SetUri(*uri)
+		request.Method = abs.GET
+
+		res, err2 := adapter.Send(context.TODO(), request, internal.MockEntityFactory, nil)
+		assert.Error(t, err2)
+		assert.Nil(t, res)
+	}
+}
+
 func TestSendReturnsObjectOnContent(t *testing.T) {
 	statusCodes := []int{200, 201, 202, 203, 204, 205}
 

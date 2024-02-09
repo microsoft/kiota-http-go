@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [1.3.1] - 2024-02-09
+
+### Added
+
+### Changed
+
+- Fix bug that resulted in the error "content is empty" being returned instead of HTTP status information if the request returned no content and an unsuccessful status code.
+
 ## [1.3.0] - 2024-01-22
 
 ### Added
