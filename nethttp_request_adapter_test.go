@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"context"
+	"fmt"
 	"github.com/microsoft/kiota-abstractions-go/serialization"
 	nethttp "net/http"
 	httptest "net/http/httptest"
@@ -337,6 +338,43 @@ func TestResponseHandlerIsCalledWhenProvided(t *testing.T) {
 	err = adapter.SendNoContent(context.Background(), request, nil)
 	assert.Nil(t, err)
 	assert.Equal(t, 2, count)
+}
+
+func TestNonFinalResponseHandlerIsCalled(t *testing.T) {
+	statusCodes := []int{200, 201, 202, 203, 204, 205}
+
+	for i := 0; i < len(statusCodes); i++ {
+
+		testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+			res.WriteHeader(statusCodes[i])
+			fmt.Fprint(res, `{}`)
+		}))
+		defer func() { testServer.Close() }()
+		authProvider := &absauth.AnonymousAuthenticationProvider{}
+		adapter, err := NewNetHttpRequestAdapterWithParseNodeFactory(authProvider, &internal.MockParseNodeFactory{})
+		assert.Nil(t, err)
+		assert.NotNil(t, adapter)
+
+		uri, err := url.Parse(testServer.URL)
+		assert.Nil(t, err)
+		assert.NotNil(t, uri)
+		request := abs.NewRequestInformation()
+		request.SetUri(*uri)
+		request.Method = abs.GET
+
+		count := 1
+		responseHandler := func(response interface{}, errorMappings abs.ErrorMappings) (interface{}, error) {
+			count = 2
+			return nil, nil
+		}
+		processHandler := NewProcessHandler(responseHandler, false)
+		request.AddRequestOptions([]abs.RequestOption{processHandler})
+
+		res, err2 := adapter.Send(context.TODO(), request, internal.MockEntityFactory, nil)
+		assert.Nil(t, err2)
+		assert.Nil(t, res)
+		assert.Equal(t, 2, count)
+	}
 }
 
 func TestNetHttpRequestAdapter_EnableBackingStore(t *testing.T) {

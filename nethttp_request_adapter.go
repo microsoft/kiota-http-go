@@ -329,7 +329,8 @@ func (a *NetHttpRequestAdapter) Send(ctx context.Context, requestInfo *abs.Reque
 		return nil, err
 	}
 
-	responseHandler := getResponseHandler(ctx)
+	processHandler := getProcessHandler(ctx)
+	responseHandler := processHandler.GetResponseHandler()
 	if responseHandler != nil {
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
@@ -337,8 +338,16 @@ func (a *NetHttpRequestAdapter) Send(ctx context.Context, requestInfo *abs.Reque
 			span.RecordError(err)
 			return nil, err
 		}
-		return result.(absser.Parsable), nil
-	} else if response != nil {
+		if processHandler.IsFinalHandler() {
+			if result != nil {
+				return result.(absser.Parsable), nil
+			} else {
+				return nil, nil
+			}
+		}
+	}
+
+	if response != nil && !processHandler.IsFinalHandler() {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
@@ -386,7 +395,8 @@ func (a *NetHttpRequestAdapter) SendEnum(ctx context.Context, requestInfo *abs.R
 		return nil, err
 	}
 
-	responseHandler := getResponseHandler(ctx)
+	processHandler := getProcessHandler(ctx)
+	responseHandler := processHandler.GetResponseHandler()
 	if responseHandler != nil {
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
@@ -394,8 +404,17 @@ func (a *NetHttpRequestAdapter) SendEnum(ctx context.Context, requestInfo *abs.R
 			span.RecordError(err)
 			return nil, err
 		}
-		return result.(absser.Parsable), nil
-	} else if response != nil {
+
+		if processHandler.IsFinalHandler() {
+			if result != nil {
+				return result.(absser.Parsable), nil
+			} else {
+				return nil, nil
+			}
+		}
+	}
+
+	if response != nil && !processHandler.IsFinalHandler() {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
@@ -437,7 +456,8 @@ func (a *NetHttpRequestAdapter) SendCollection(ctx context.Context, requestInfo 
 		return nil, err
 	}
 
-	responseHandler := getResponseHandler(ctx)
+	processHandler := getProcessHandler(ctx)
+	responseHandler := processHandler.GetResponseHandler()
 	if responseHandler != nil {
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
@@ -445,8 +465,17 @@ func (a *NetHttpRequestAdapter) SendCollection(ctx context.Context, requestInfo 
 			span.RecordError(err)
 			return nil, err
 		}
-		return result.([]absser.Parsable), nil
-	} else if response != nil {
+
+		if processHandler.IsFinalHandler() {
+			if result != nil {
+				return result.([]absser.Parsable), nil
+			} else {
+				return nil, nil
+			}
+		}
+	}
+
+	if response != nil && !processHandler.IsFinalHandler() {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
@@ -488,7 +517,8 @@ func (a *NetHttpRequestAdapter) SendEnumCollection(ctx context.Context, requestI
 		return nil, err
 	}
 
-	responseHandler := getResponseHandler(ctx)
+	processHandler := getProcessHandler(ctx)
+	responseHandler := processHandler.GetResponseHandler()
 	if responseHandler != nil {
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
@@ -496,8 +526,17 @@ func (a *NetHttpRequestAdapter) SendEnumCollection(ctx context.Context, requestI
 			span.RecordError(err)
 			return nil, err
 		}
-		return result.([]any), nil
-	} else if response != nil {
+
+		if processHandler.IsFinalHandler() {
+			if result != nil {
+				return result.([]any), nil
+			} else {
+				return nil, nil
+			}
+		}
+	}
+
+	if response != nil && !processHandler.IsFinalHandler() {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
@@ -526,12 +565,22 @@ func (a *NetHttpRequestAdapter) SendEnumCollection(ctx context.Context, requestI
 	}
 }
 
-func getResponseHandler(ctx context.Context) abs.ResponseHandler {
+// returns a response handler and a condition to continue processing if it works
+func getProcessHandler(ctx context.Context) ProcessHandler {
 	var handlerOption = ctx.Value(abs.ResponseHandlerOptionKey)
+	var handler abs.ResponseHandler
+	isFinalHandler := true
 	if handlerOption != nil {
-		return handlerOption.(abs.RequestHandlerOption).GetResponseHandler()
+		handler = handlerOption.(abs.RequestHandlerOption).GetResponseHandler()
+		// check of the option key implement HandlerType
+		if handlerType, ok := handlerOption.(HandlerType); ok {
+			isFinalHandler = handlerType.IsFinalHandler()
+		} else {
+			isFinalHandler = true
+		}
 	}
-	return nil
+
+	return NewProcessHandler(handler, isFinalHandler)
 }
 
 // SendPrimitive executes the HTTP request specified by the given RequestInformation and returns the deserialized primitive response model.
@@ -547,7 +596,8 @@ func (a *NetHttpRequestAdapter) SendPrimitive(ctx context.Context, requestInfo *
 		return nil, err
 	}
 
-	responseHandler := getResponseHandler(ctx)
+	processHandler := getProcessHandler(ctx)
+	responseHandler := processHandler.GetResponseHandler()
 	if responseHandler != nil {
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
@@ -555,8 +605,17 @@ func (a *NetHttpRequestAdapter) SendPrimitive(ctx context.Context, requestInfo *
 			span.RecordError(err)
 			return nil, err
 		}
-		return result.(absser.Parsable), nil
-	} else if response != nil {
+
+		if processHandler.IsFinalHandler() {
+			if result != nil {
+				return result.(absser.Parsable), nil
+			} else {
+				return nil, nil
+			}
+		}
+	}
+
+	if response != nil && !processHandler.IsFinalHandler() {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
@@ -628,7 +687,8 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollection(ctx context.Context, req
 		return nil, err
 	}
 
-	responseHandler := getResponseHandler(ctx)
+	processHandler := getProcessHandler(ctx)
+	responseHandler := processHandler.GetResponseHandler()
 	if responseHandler != nil {
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		result, err := responseHandler(response, errorMappings)
@@ -636,8 +696,17 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollection(ctx context.Context, req
 			span.RecordError(err)
 			return nil, err
 		}
-		return result.([]any), nil
-	} else if response != nil {
+
+		if processHandler.IsFinalHandler() {
+			if result != nil {
+				return result.([]any), nil
+			} else {
+				return nil, nil
+			}
+		}
+	}
+
+	if response != nil && !processHandler.IsFinalHandler() {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
@@ -679,15 +748,22 @@ func (a *NetHttpRequestAdapter) SendNoContent(ctx context.Context, requestInfo *
 		return err
 	}
 
-	responseHandler := getResponseHandler(ctx)
+	processHandler := getProcessHandler(ctx)
+	responseHandler := processHandler.GetResponseHandler()
 	if responseHandler != nil {
 		span.AddEvent(EventResponseHandlerInvokedKey)
 		_, err := responseHandler(response, errorMappings)
 		if err != nil {
 			span.RecordError(err)
+			return err
 		}
-		return err
-	} else if response != nil {
+
+		if processHandler.IsFinalHandler() {
+			return nil
+		}
+	}
+
+	if response != nil && !processHandler.IsFinalHandler() {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
 		if err != nil {
