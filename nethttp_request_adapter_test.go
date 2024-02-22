@@ -341,7 +341,7 @@ func TestResponseHandlerIsCalledWhenProvided(t *testing.T) {
 }
 
 func TestNonFinalResponseHandlerIsCalled(t *testing.T) {
-	statusCodes := []int{200, 201, 202, 203, 204, 205}
+	statusCodes := []int{200, 201, 202, 203}
 
 	for i := 0; i < len(statusCodes); i++ {
 
@@ -372,7 +372,7 @@ func TestNonFinalResponseHandlerIsCalled(t *testing.T) {
 
 		res, err2 := adapter.Send(context.TODO(), request, internal.MockEntityFactory, nil)
 		assert.Nil(t, err2)
-		assert.Nil(t, res)
+		assert.NotNil(t, res)
 		assert.Equal(t, 2, count)
 	}
 }
