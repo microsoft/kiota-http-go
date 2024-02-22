@@ -2,15 +2,9 @@ package nethttplibrary
 
 import abs "github.com/microsoft/kiota-abstractions-go"
 
-type HandlerType interface {
-	// IsFinalHandler returns true if the current handler is the last one in the chain
-	IsFinalHandler() bool
-}
-
 type ProcessHandler interface {
-	HandlerType
+	IsFinalHandler() bool
 	abs.RequestHandlerOption
-	GetResponseHandler() abs.ResponseHandler
 }
 
 type processHandler struct {

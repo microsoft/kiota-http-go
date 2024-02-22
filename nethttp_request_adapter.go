@@ -573,10 +573,8 @@ func getProcessHandler(ctx context.Context) ProcessHandler {
 	if handlerOption != nil {
 		handler = handlerOption.(abs.RequestHandlerOption).GetResponseHandler()
 		// check of the option key implement HandlerType
-		if handlerType, ok := handlerOption.(HandlerType); ok {
+		if handlerType, ok := handlerOption.(ProcessHandler); ok {
 			isFinalHandler = handlerType.IsFinalHandler()
-		} else {
-			isFinalHandler = true
 		}
 	}
 
