@@ -90,7 +90,7 @@ func (middleware HeadersInspectionHandler) Intercept(pipeline Pipeline, middlewa
 		defer span.End()
 		req = req.WithContext(ctx)
 	}
-	reqOption, ok := req.Context().Value(retryKeyValue).(headersInspectionOptionsInt)
+	reqOption, ok := req.Context().Value(headersInspectionKeyValue).(headersInspectionOptionsInt)
 	if !ok {
 		reqOption = &middleware.options
 	}
