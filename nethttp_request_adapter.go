@@ -278,6 +278,9 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		reader := bytes.NewReader(requestInfo.Content)
 		request.Body = NopCloser(reader)
 	}
+	if requestInfo.ContentReader != nil {
+		request.Body = requestInfo.ContentReader
+	}
 	if request.Header == nil {
 		request.Header = make(nethttp.Header)
 	}
@@ -574,6 +577,9 @@ func (a *NetHttpRequestAdapter) SendPrimitive(ctx context.Context, requestInfo *
 				return nil, nil
 			}
 			return res, nil
+		}
+		if typeName == "io.ReadCloser" {
+			return response.Body, nil
 		}
 		parseNode, _, err := a.getRootParseNode(ctx, response, span)
 		if err != nil {
