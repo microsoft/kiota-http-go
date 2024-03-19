@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [1.3.3] - 2024-03-19
+
+- Fix bug where overriding http.DefaultTransport with an implementation other than http.Transport would result in an interface conversion panic
+
+### Changed
+
 ## [1.3.2] - 2024-02-28
 
 ### Changed
