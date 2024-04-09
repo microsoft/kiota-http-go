@@ -743,7 +743,7 @@ const ErrorBodyFoundAttributeName = "com.microsoft.kiota.error.body_found"
 func (a *NetHttpRequestAdapter) throwIfFailedResponse(ctx context.Context, response *nethttp.Response, errorMappings abs.ErrorMappings, spanForAttributes trace.Span) error {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "throwIfFailedResponse")
 	defer span.End()
-	if response.StatusCode < 400 || response.StatusCode == http.StatusNotModified {
+	if response.StatusCode < 400 || response.StatusCode == nethttp.StatusNotModified {
 		return nil
 	}
 	spanForAttributes.SetStatus(codes.Error, "received_error_response")
