@@ -42,7 +42,7 @@ func NewUserAgentHandlerOptions() *UserAgentHandlerOptions {
 	return &UserAgentHandlerOptions{
 		Enabled:        true,
 		ProductName:    "kiota-go",
-		ProductVersion: "1.3.3",
+		ProductVersion: "1.3.4",
 	}
 }
 

@@ -337,6 +337,9 @@ func (a *NetHttpRequestAdapter) Send(ctx context.Context, requestInfo *abs.Reque
 			span.RecordError(err)
 			return nil, err
 		}
+		if result == nil {
+			return nil, nil
+		}
 		return result.(absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
@@ -394,6 +397,9 @@ func (a *NetHttpRequestAdapter) SendEnum(ctx context.Context, requestInfo *abs.R
 			span.RecordError(err)
 			return nil, err
 		}
+		if result == nil {
+			return nil, nil
+		}
 		return result.(absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
@@ -445,6 +451,9 @@ func (a *NetHttpRequestAdapter) SendCollection(ctx context.Context, requestInfo 
 			span.RecordError(err)
 			return nil, err
 		}
+		if result == nil {
+			return nil, nil
+		}
 		return result.([]absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
@@ -495,6 +504,9 @@ func (a *NetHttpRequestAdapter) SendEnumCollection(ctx context.Context, requestI
 		if err != nil {
 			span.RecordError(err)
 			return nil, err
+		}
+		if result == nil {
+			return nil, nil
 		}
 		return result.([]any), nil
 	} else if response != nil {
@@ -554,6 +566,9 @@ func (a *NetHttpRequestAdapter) SendPrimitive(ctx context.Context, requestInfo *
 		if err != nil {
 			span.RecordError(err)
 			return nil, err
+		}
+		if result == nil {
+			return nil, nil
 		}
 		return result.(absser.Parsable), nil
 	} else if response != nil {
@@ -635,6 +650,9 @@ func (a *NetHttpRequestAdapter) SendPrimitiveCollection(ctx context.Context, req
 		if err != nil {
 			span.RecordError(err)
 			return nil, err
+		}
+		if result == nil {
+			return nil, nil
 		}
 		return result.([]any), nil
 	} else if response != nil {
