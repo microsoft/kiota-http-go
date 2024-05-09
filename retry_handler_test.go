@@ -106,6 +106,34 @@ func TestItHonoursMaxRetries(t *testing.T) {
 	assert.Equal(t, defaultMaxRetries, retryAttemptInt)
 }
 
+func TestItHonoursRetryAfterDate(t *testing.T) {
+	retryAttemptInt := -1
+	start := time.Now()
+	retryAfterTimeStr := start.Add(4 * time.Second).Format(time.RFC1123)
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.Header().Set("Retry-After", retryAfterTimeStr)
+		res.WriteHeader(429)
+		retryAttemptInt++
+		res.Write([]byte("body"))
+	}))
+
+	defer func() { testServer.Close() }()
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, testServer.URL, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	if err != nil {
+		t.Error(err)
+	}
+	assert.NotNil(t, resp)
+	end := time.Now()
+
+	assert.Equal(t, defaultMaxRetries, retryAttemptInt)
+	assert.Greater(t, end.Sub(start), 3*time.Second) // delay should be greater than 3 seconds (ignoring microsecond differences)
+}
+
 func TestItHonoursContextExpiry(t *testing.T) {
 	retryAttemptInt := -1
 	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {

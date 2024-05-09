@@ -184,6 +184,12 @@ func (middleware RetryHandler) getRetryDelay(req *nethttp.Request, resp *nethttp
 		if err == nil {
 			return time.Duration(retryAfterDelay) * time.Second
 		}
-	} //TODO parse the header if it's a date
+
+		// parse the header if it's a date
+		t, err := time.Parse(time.RFC1123, retryAfter)
+		if err == nil {
+			return t.Sub(time.Now())
+		}
+	}
 	return time.Duration(math.Pow(float64(options.GetDelaySeconds()), float64(executionCount))) * time.Second
 }
