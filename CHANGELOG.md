@@ -9,15 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-## [1.4.0] - 2024-05-09
-
-- Support retry after as a date.
-
-## [1.3.4] - 2024-05-09
+## [1.4.1] - 2024-05-09
 
 ### Changed
 
 - Allow custom response handlers to return nil result values.
+
+## [1.4.0] - 2024-05-09
+
+- Support retry after as a date.
 
 ## [1.3.3] - 2024-03-19
 
