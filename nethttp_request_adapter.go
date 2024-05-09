@@ -337,6 +337,9 @@ func (a *NetHttpRequestAdapter) Send(ctx context.Context, requestInfo *abs.Reque
 			span.RecordError(err)
 			return nil, err
 		}
+		if result == nil {
+			return nil, nil
+		}
 		return result.(absser.Parsable), nil
 	} else if response != nil {
 		defer a.purge(response)
