@@ -74,7 +74,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		req = req.WithContext(ctx)
 	}
 
-	if !reqOption.ShouldCompress() || req.Body == nil {
+	if !reqOption.ShouldCompress() || contentRangeIsPresent(req.Header) || req.Body == nil {
 		return pipeline.Next(req, middlewareIndex)
 	}
 	if span != nil {
@@ -127,6 +127,11 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	}
 
 	return resp, nil
+}
+
+func contentRangeIsPresent(header http.Header) bool {
+	_, contentRangePresent := header["Content-Range"]
+	return contentRangePresent
 }
 
 func compressReqBody(reqBody []byte) (io.ReadCloser, int, error) {
