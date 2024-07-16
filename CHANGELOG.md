@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Prevent compression if Content-Range header is present.
-- Fix bug which leads to a mission Content-Length header.
+- Fix bug which leads to a missing Content-Length header.
 
 ## [1.4.1] - 2024-05-09
 
