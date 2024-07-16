@@ -35,7 +35,7 @@ func NewCompressionHandler() *CompressionHandler {
 	return NewCompressionHandlerWithOptions(options)
 }
 
-// NewCompressionHandlerWithOptions creates an instance of the compression middlerware with
+// NewCompressionHandlerWithOptions creates an instance of the compression middleware with
 // specified configurations.
 func NewCompressionHandlerWithOptions(option CompressionOptions) *CompressionHandler {
 	return &CompressionHandler{options: option}
