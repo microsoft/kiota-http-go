@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"io"
 	"net/http"
+	"strings"
 
 	abstractions "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
@@ -35,7 +36,7 @@ func NewCompressionHandler() *CompressionHandler {
 	return NewCompressionHandlerWithOptions(options)
 }
 
-// NewCompressionHandlerWithOptions creates an instance of the compression middlerware with
+// NewCompressionHandlerWithOptions creates an instance of the compression middleware with
 // specified configurations.
 func NewCompressionHandlerWithOptions(option CompressionOptions) *CompressionHandler {
 	return &CompressionHandler{options: option}
@@ -74,7 +75,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		req = req.WithContext(ctx)
 	}
 
-	if !reqOption.ShouldCompress() || req.Body == nil {
+	if !reqOption.ShouldCompress() || contentRangeBytesIsPresent(req.Header) || req.Body == nil {
 		return pipeline.Next(req, middlewareIndex)
 	}
 	if span != nil {
@@ -127,6 +128,16 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	}
 
 	return resp, nil
+}
+
+func contentRangeBytesIsPresent(header http.Header) bool {
+	contentRanges, _ := header["Content-Range"]
+	for _, contentRange := range contentRanges {
+		if strings.Contains(strings.ToLower(contentRange), "bytes") {
+			return true
+		}
+	}
+	return false
 }
 
 func compressReqBody(reqBody []byte) (io.ReadCloser, int, error) {
