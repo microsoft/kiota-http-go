@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [1.4.3] - 2024-07-22
+
+### Changed
+
+- Fixed a bug to prevent double request compression by the compression handler.
+
 ## [1.4.2] - 2024-07-16
 
 ### Changed
