@@ -144,6 +144,7 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 			ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RetryHandler_Intercept - attempt "+fmt.Sprint(executionCount))
 			span.SetAttributes(attribute.Int("http.retry_count", executionCount),
 				attribute.Int("http.status_code", resp.StatusCode),
+				attribute.Float64("http.retry_delay", delay.Seconds()),
 			)
 			defer span.End()
 			req = req.WithContext(ctx)
