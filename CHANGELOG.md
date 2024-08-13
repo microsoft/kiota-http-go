@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [1.4.4] - 2024-08-13
+
+### Changed
+
+- Added `http.request.resend_delay` as a span attribute for the retry handler
+- Changed the `http.retry_count` span attribute to `http.request.resend_count` to conform to OpenTelemetry specs.
+
 ## [1.4.3] - 2024-07-22
 
 ### Changed
