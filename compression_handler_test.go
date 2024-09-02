@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"testing"
@@ -57,6 +58,33 @@ func TestCompressionHandlerCompressesRequestBody(t *testing.T) {
 
 	assert.Greater(t, len(postBody), len(compressedBody))
 
+}
+
+func TestCompressionHandlerCompressesRequestBodyWithRetry(t *testing.T) {
+	postBody, _ := json.Marshal(map[string]string{"name": `Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots in a piece of classical Latin literature from 45 BC, making it over 2000 years old. Richard McClintock, a Latin professor at Hampden-Sydney College in Virginia, looked up one of the more obscure Latin words, consectetur, from a Lorem Ipsum passage, and going through the cites of the word in classical literature, discovered the undoubtable source. Lorem Ipsum comes from sections 1.10.32 and 1.10.33 of "de Finibus Bonorum et Malorum" (The Extremes of Good and Evil) by Cicero, written in 45 BC. This book is a treatise on the theory of ethics, very popular during the Renaissance. The first line of Lorem Ipsum, "Lorem ipsum dolor sit amet..", comes from Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.a line in section 1.10.32.
+    `, "email": "Test@Test.com"})
+
+	var compressedBody []byte
+	var requestCount int
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		if requestCount == 0 {
+			res.WriteHeader(http.StatusTooManyRequests)
+			requestCount++
+			return
+		}
+
+		compressedBody, _ = io.ReadAll(req.Body)
+		fmt.Fprint(res, `{}`)
+	}))
+	defer testServer.Close()
+
+	client := GetDefaultClient(NewCompressionHandler(), NewRetryHandler())
+	_, err := client.Post(testServer.URL, "application/json", bytes.NewBuffer(postBody))
+
+	assert.NotZero(t, len(compressedBody))
+	assert.Greater(t, len(postBody), len(compressedBody))
+	assert.Equal(t, requestCount, 1)
+	assert.NoError(t, err)
 }
 
 func TestCompressionHandlerContentRangeRequestBody(t *testing.T) {
