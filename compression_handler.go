@@ -145,7 +145,7 @@ func contentEncodingIsPresent(header http.Header) bool {
 	return ok
 }
 
-func compressReqBody(reqBody []byte) (io.ReadCloser, int, error) {
+func compressReqBody(reqBody []byte) (io.ReadSeekCloser, int, error) {
 	var buffer bytes.Buffer
 	gzipWriter := gzip.NewWriter(&buffer)
 	if _, err := gzipWriter.Write(reqBody); err != nil {
@@ -156,5 +156,6 @@ func compressReqBody(reqBody []byte) (io.ReadCloser, int, error) {
 		return nil, 0, err
 	}
 
-	return io.NopCloser(&buffer), buffer.Len(), nil
+	reader := bytes.NewReader(buffer.Bytes())
+	return NopCloser(reader), buffer.Len(), nil
 }
