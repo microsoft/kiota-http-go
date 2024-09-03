@@ -48,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [1.4.0] - 2024-03-07
+
+### Added
+
+- Returns an `io.ReadCloser` for streamed responses, allows passing an `io.ReadCloser` to request information.
+
+### Changed
+
 ## [1.3.2] - 2024-02-28
 
 ### Changed
