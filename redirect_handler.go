@@ -11,6 +11,7 @@ import (
 	abs "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -120,7 +121,7 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 		if observabilityName != "" {
 			ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
 			span.SetAttributes(attribute.Int("com.microsoft.kiota.handler.redirect.count", redirectCount),
-				attribute.Int("http.status_code", response.StatusCode),
+				semconv.HTTPResponseStatusCode(response.StatusCode),
 			)
 			defer span.End()
 			redirectRequest = redirectRequest.WithContext(ctx)

@@ -12,6 +12,7 @@ import (
 	abs "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -144,9 +145,8 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 			ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RetryHandler_Intercept - attempt "+fmt.Sprint(executionCount))
 			span.SetAttributes(attribute.Int("http.request.resend_count", executionCount),
 
-				attribute.Int("http.status_code", resp.StatusCode),
+				semconv.HTTPResponseStatusCode(resp.StatusCode),
 				attribute.Float64("http.request.resend_delay", delay.Seconds()),
-
 			)
 			defer span.End()
 			req = req.WithContext(ctx)

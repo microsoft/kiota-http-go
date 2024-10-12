@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -148,15 +149,15 @@ func (a *NetHttpRequestAdapter) getHttpResponseMessage(ctx context.Context, requ
 		contentLenHeader := response.Header.Get("Content-Length")
 		if contentLenHeader != "" {
 			contentLen, _ := strconv.Atoi(contentLenHeader)
-			spanForAttributes.SetAttributes(attribute.Int("http.response_content_length", contentLen))
+			spanForAttributes.SetAttributes(semconv.HTTPResponseBodySize(contentLen))
 		}
 		contentTypeHeader := response.Header.Get("Content-Type")
 		if contentTypeHeader != "" {
-			spanForAttributes.SetAttributes(attribute.String("http.response_content_type", contentTypeHeader))
+			spanForAttributes.SetAttributes(attribute.String("http.response.header.content-type", contentTypeHeader))
 		}
 		spanForAttributes.SetAttributes(
-			attribute.Int("http.status_code", response.StatusCode),
-			attribute.String("http.flavor", response.Proto),
+			semconv.HTTPResponseStatusCode(response.StatusCode),
+			semconv.NetworkProtocolName(response.Proto),
 		)
 	}
 	return a.retryCAEResponseIfRequired(ctx, response, requestInfo, claims, spanForAttributes)
@@ -253,19 +254,19 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 	if spanForAttributes == nil {
 		spanForAttributes = span
 	}
-	spanForAttributes.SetAttributes(attribute.String("http.method", requestInfo.Method.String()))
+	spanForAttributes.SetAttributes(semconv.HTTPRequestMethodKey.String(requestInfo.Method.String()))
 	uri, err := requestInfo.GetUri()
 	if err != nil {
 		spanForAttributes.RecordError(err)
 		return nil, err
 	}
 	spanForAttributes.SetAttributes(
-		attribute.String("http.scheme", uri.Scheme),
-		attribute.String("http.host", uri.Host),
+		semconv.ServerAddress(uri.Scheme),
+		semconv.URLScheme(uri.Host),
 	)
 
 	if a.observabilityOptions.IncludeEUIIAttributes {
-		spanForAttributes.SetAttributes(attribute.String("http.uri", uri.String()))
+		spanForAttributes.SetAttributes(semconv.URLFull(uri.String()))
 	}
 
 	request, err := nethttp.NewRequestWithContext(ctx, requestInfo.Method.String(), uri.String(), nil)
@@ -290,14 +291,14 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		}
 		if request.Header.Get("Content-Type") != "" {
 			spanForAttributes.SetAttributes(
-				attribute.String("http.request_content_type", request.Header.Get("Content-Type")),
+				attribute.String("http.request.header.content-type", request.Header.Get("Content-Type")),
 			)
 		}
 		if request.Header.Get("Content-Length") != "" {
 			contentLenVal, _ := strconv.Atoi(request.Header.Get("Content-Length"))
 			request.ContentLength = int64(contentLenVal)
 			spanForAttributes.SetAttributes(
-				attribute.Int("http.request_content_length", contentLenVal),
+				semconv.HTTPRequestBodySize(contentLenVal),
 			)
 		}
 	}
@@ -313,7 +314,7 @@ func (a *NetHttpRequestAdapter) startTracingSpan(ctx context.Context, requestInf
 	decodedUriTemplate := decodeUriEncodedString(requestInfo.UrlTemplate, []byte{'-', '.', '~', '$'})
 	telemetryPathValue := queryParametersCleanupRegex.ReplaceAll([]byte(decodedUriTemplate), []byte(""))
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, methodName+" - "+string(telemetryPathValue))
-	span.SetAttributes(attribute.String("http.uri_template", decodedUriTemplate))
+	span.SetAttributes(attribute.String("url.uri_template", decodedUriTemplate))
 	return ctx, span
 }
 
