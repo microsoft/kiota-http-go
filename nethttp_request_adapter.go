@@ -178,7 +178,7 @@ func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, 
 		authenticateHeaderVal := response.Header.Get("WWW-Authenticate")
 		if authenticateHeaderVal != "" && reBearer.Match([]byte(authenticateHeaderVal)) {
 			span.AddEvent(AuthenticateChallengedEventKey)
-			spanForAttributes.SetAttributes(attribute.Int("http.retry_count", 1))
+			spanForAttributes.SetAttributes(semconv.HTTPRequestResendCount(1))
 			responseClaims := ""
 			parametersRaw := string(reBearer.ReplaceAll([]byte(authenticateHeaderVal), []byte("")))
 			parameters := strings.Split(parametersRaw, ",")
