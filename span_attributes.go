@@ -12,7 +12,7 @@ const (
 // HTTP Response attributes
 const (
 	HttpResponseBodySizeAttribute          = attribute.Key("http.response.body.size")
-	HttpResponseHeaderContentTypeAttribute = attribute.Key("http.response.header.content_type")
+	HttpResponseHeaderContentTypeAttribute = attribute.Key("http.response.header.content-type")
 	HttpResponseStatusCodeAttribute        = attribute.Key("http.response.status_code")
 )
 
@@ -30,5 +30,5 @@ const (
 const (
 	UrlFullAttribute      = attribute.Key("url.full")
 	UrlSchemeAttribute    = attribute.Key("url.scheme")
-	UrlUriSchemeAttribute = attribute.Key("url.uri_scheme")
+	UrlUriTemplateAttribute = attribute.Key("url.uri_template")
 )
