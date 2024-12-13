@@ -10,7 +10,6 @@ import (
 	abstractions "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -105,7 +104,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	req.ContentLength = int64(size)
 
 	if span != nil {
-		span.SetAttributes(semconv.HTTPRequestBodySize(int(req.ContentLength)))
+		span.SetAttributes(HttpRequestBodySizeAttribute.Int(int(req.ContentLength)))
 	}
 
 	// Sending request with compressed body
@@ -121,8 +120,8 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		req.ContentLength = unCompressedContentLength
 
 		if span != nil {
-			span.SetAttributes(semconv.HTTPRequestBodySize(int(req.ContentLength)),
-				semconv.HTTPResponseStatusCode(415))
+			span.SetAttributes(HttpRequestBodySizeAttribute.Int(int(req.ContentLength)),
+				HttpResponseStatusCodeAttribute.Int(415))
 		}
 
 		return pipeline.Next(req, middlewareIndex)
