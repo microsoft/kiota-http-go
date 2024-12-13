@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.6] - 2024-12-13
+
+### Changed
+
+- Fixed a bug where headers inspection handler would fail upon receiving an error.
+
 ## [1.4.5] - 2024-09-03
 
 ### Changed
+
 - Fixed a bug in compression middleware which caused empty body to send on retries
 
 ## [1.4.4] - 2024-08-13
