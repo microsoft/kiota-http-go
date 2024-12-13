@@ -4,32 +4,32 @@ import "go.opentelemetry.io/otel/attribute"
 
 // HTTP Request attributes
 const (
-	HttpRequestBodySizeAttribute          = attribute.Key("http.request.body.size")
-	HttpRequestResendCountAttribute       = attribute.Key("http.request.resend_count")
-	HttpRequestMethodAttribute            = attribute.Key("http.request.method")
-	HttpRequestHeaderContentTypeAttribute = attribute.Key("http.request.header.content-type")
+	httpRequestBodySizeAttribute          = attribute.Key("http.request.body.size")
+	httpRequestResendCountAttribute       = attribute.Key("http.request.resend_count")
+	httpRequestMethodAttribute            = attribute.Key("http.request.method")
+	httpRequestHeaderContentTypeAttribute = attribute.Key("http.request.header.content-type")
 )
 
 // HTTP Response attributes
 const (
-	HttpResponseBodySizeAttribute          = attribute.Key("http.response.body.size")
-	HttpResponseHeaderContentTypeAttribute = attribute.Key("http.response.header.content-type")
-	HttpResponseStatusCodeAttribute        = attribute.Key("http.response.status_code")
+	httpResponseBodySizeAttribute          = attribute.Key("http.response.body.size")
+	httpResponseHeaderContentTypeAttribute = attribute.Key("http.response.header.content-type")
+	httpResponseStatusCodeAttribute        = attribute.Key("http.response.status_code")
 )
 
 // Network attributes
 const (
-	NetworkProtocolNameAttribute = attribute.Key("network.protocol.name")
+	networkProtocolNameAttribute = attribute.Key("network.protocol.name")
 )
 
 // Server attributes
 const (
-	ServerAddressAttribute = attribute.Key("server.address")
+	serverAddressAttribute = attribute.Key("server.address")
 )
 
 // URL attributes
 const (
-	UrlFullAttribute        = attribute.Key("url.full")
-	UrlSchemeAttribute      = attribute.Key("url.scheme")
-	UrlUriTemplateAttribute = attribute.Key("url.uri_template")
+	urlFullAttribute        = attribute.Key("url.full")
+	urlSchemeAttribute      = attribute.Key("url.scheme")
+	urlUriTemplateAttribute = attribute.Key("url.uri_template")
 )

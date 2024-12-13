@@ -104,7 +104,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	req.ContentLength = int64(size)
 
 	if span != nil {
-		span.SetAttributes(HttpRequestBodySizeAttribute.Int(int(req.ContentLength)))
+		span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)))
 	}
 
 	// Sending request with compressed body
@@ -120,8 +120,8 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		req.ContentLength = unCompressedContentLength
 
 		if span != nil {
-			span.SetAttributes(HttpRequestBodySizeAttribute.Int(int(req.ContentLength)),
-				HttpResponseStatusCodeAttribute.Int(415))
+			span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)),
+				httpResponseStatusCodeAttribute.Int(415))
 		}
 
 		return pipeline.Next(req, middlewareIndex)
