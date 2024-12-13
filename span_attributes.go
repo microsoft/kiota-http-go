@@ -4,9 +4,10 @@ import "go.opentelemetry.io/otel/attribute"
 
 // HTTP Request attributes
 const (
-	HttpRequestBodySizeAttribute    = attribute.Key("http.request.body.size")
-	HttpRequestResendCountAttribute = attribute.Key("http.request.resend_count")
-	HttpRequestMethodAttribute      = attribute.Key("http.request.method")
+	HttpRequestBodySizeAttribute          = attribute.Key("http.request.body.size")
+	HttpRequestResendCountAttribute       = attribute.Key("http.request.resend_count")
+	HttpRequestMethodAttribute            = attribute.Key("http.request.method")
+	HttpRequestHeaderContentTypeAttribute = attribute.Key("http.request.header.content-type")
 )
 
 // HTTP Response attributes
@@ -28,7 +29,7 @@ const (
 
 // URL attributes
 const (
-	UrlFullAttribute      = attribute.Key("url.full")
-	UrlSchemeAttribute    = attribute.Key("url.scheme")
+	UrlFullAttribute        = attribute.Key("url.full")
+	UrlSchemeAttribute      = attribute.Key("url.scheme")
 	UrlUriTemplateAttribute = attribute.Key("url.uri_template")
 )

@@ -290,7 +290,7 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		}
 		if request.Header.Get("Content-Type") != "" {
 			spanForAttributes.SetAttributes(
-				attribute.String("http.request.header.content-type", request.Header.Get("Content-Type")),
+				HttpRequestHeaderContentTypeAttribute.String(request.Header.Get("Content-Type")),
 			)
 		}
 		if request.Header.Get("Content-Length") != "" {
