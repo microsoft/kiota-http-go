@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0](https://github.com/microsoft/kiota-http-go/compare/v1.4.7...v1.5.0) (2025-03-13)
+
+
+### Features
+
+* upgrades required go version from go1.18 to go 1.22 ([2e60cd5](https://github.com/microsoft/kiota-http-go/commit/2e60cd5800241b2c08b21ab523d9ffc216383db0))
+
 ## [1.4.7] - 2024-12-13
 
 ### Changed
