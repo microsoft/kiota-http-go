@@ -1,19 +1,19 @@
 module github.com/microsoft/kiota-http-go
 
-go 1.22.0
+go 1.23.0
 
 toolchain go1.24.1
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/microsoft/kiota-abstractions-go v1.9.0
+	github.com/microsoft/kiota-abstractions-go v1.9.1
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/trace v1.35.0
 )
 
 require (
-	github.com/cjlapao/common-go v0.0.41 // indirect
+	github.com/cjlapao/common-go v0.0.48 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
