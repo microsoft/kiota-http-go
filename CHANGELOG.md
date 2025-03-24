@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1](https://github.com/microsoft/kiota-http-go/compare/v1.5.0...v1.5.1) (2025-03-24)
+
+
+### Bug Fixes
+
+* upgrades common go dependency to solve triming issues ([4a57c46](https://github.com/microsoft/kiota-http-go/commit/4a57c4687dec3e8d6801538c458cab19f47a480d))
+* upgrades common go dependency to solve triming issues ([d1aa07f](https://github.com/microsoft/kiota-http-go/commit/d1aa07f2a1b9c0d21f5808a8be41c65f236c8929))
+
 ## [1.5.0](https://github.com/microsoft/kiota-http-go/compare/v1.4.7...v1.5.0) (2025-03-13)
 
 
