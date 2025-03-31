@@ -20,7 +20,7 @@ func TestGetDefaultMiddleWareWithMultipleOptions(t *testing.T) {
 			return true
 		},
 	}
-	compressionOptions := NewCompressionOptions(false)
+	compressionOptions := NewCompressionOptionsReference(false)
 	parametersNameDecodingOptions := ParametersNameDecodingOptions{
 		Enable:             true,
 		ParametersToDecode: []byte{'-', '.', '~', '$'},
@@ -36,7 +36,7 @@ func TestGetDefaultMiddleWareWithMultipleOptions(t *testing.T) {
 	}
 	options, err := GetDefaultMiddlewaresWithOptions(&retryOptions,
 		&redirectHandlerOptions,
-		&compressionOptions,
+		compressionOptions,
 		&parametersNameDecodingOptions,
 		&userAgentHandlerOptions,
 		&headersInspectionOptions,
@@ -67,19 +67,28 @@ func TestGetDefaultMiddleWareWithInvalidOption(t *testing.T) {
 }
 
 func TestGetDefaultMiddleWareWithOptions(t *testing.T) {
+	compression := NewCompressionOptionsReference(false)
+	options, err := GetDefaultMiddlewaresWithOptions(compression)
+	verifyMiddlewareWithDisabledCompression(t, options, err)
+}
+
+func TestGetDefaultMiddleWareWithOptionsDeprecated(t *testing.T) {
 	compression := NewCompressionOptions(false)
-	options, err := GetDefaultMiddlewaresWithOptions(&compression)
+	options, err := GetDefaultMiddlewaresWithOptions(compression)
+	verifyMiddlewareWithDisabledCompression(t, options, err)
+}
+
+func verifyMiddlewareWithDisabledCompression(t *testing.T, options []Middleware, err error) {
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 	if len(options) != 6 {
 		t.Errorf("expected 6 middleware, got %v", len(options))
 	}
-
 	for _, element := range options {
 		switch v := element.(type) {
 		case *CompressionHandler:
-			assert.Equal(t, v.options.ShouldCompress(), compression.ShouldCompress())
+			assert.Equal(t, v.options.ShouldCompress(), false)
 		}
 	}
 }
