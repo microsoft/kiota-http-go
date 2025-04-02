@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.2](https://github.com/microsoft/kiota-http-go/compare/v1.5.1...v1.5.2) (2025-04-02)
+
+
+### Bug Fixes
+
+* removes common go dependency ([42c2137](https://github.com/microsoft/kiota-http-go/commit/42c21377c7d3af3863bfcfcf28956cdaad99c850))
+* removes common go dependency ([df1bf28](https://github.com/microsoft/kiota-http-go/commit/df1bf281692b9b3dede2f1a845cb590c0a490717))
+
 ## [1.5.1](https://github.com/microsoft/kiota-http-go/compare/v1.5.0...v1.5.1) (2025-03-24)
 
 
