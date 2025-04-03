@@ -32,8 +32,8 @@ var compressKey = abstractions.RequestOptionKey{Key: "CompressionHandler"}
 
 // NewCompressionHandler creates an instance of a compression middleware
 func NewCompressionHandler() *CompressionHandler {
-	options := NewCompressionOptions(true)
-	return NewCompressionHandlerWithOptions(options)
+	options := NewCompressionOptionsReference(true)
+	return NewCompressionHandlerWithOptions(*options)
 }
 
 // NewCompressionHandlerWithOptions creates an instance of the compression middleware with
@@ -43,8 +43,20 @@ func NewCompressionHandlerWithOptions(option CompressionOptions) *CompressionHan
 }
 
 // NewCompressionOptions creates a configuration object for the CompressionHandler
+//
+// Deprecated: This function is deprecated, and superseded by NewCompressionOptionsReference,
+// which returns a pointer instead of plain value.
 func NewCompressionOptions(enableCompression bool) CompressionOptions {
 	return CompressionOptions{enableCompression: enableCompression}
+}
+
+// NewCompressionOptionsReference creates a configuration object for the CompressionHandler.
+//
+// This function supersedes the NewCompressionOptions function and returns a pointer,
+// which is expected by GetDefaultMiddlewaresWithOptions.
+func NewCompressionOptionsReference(enableCompression bool) *CompressionOptions {
+	options := CompressionOptions{enableCompression: enableCompression}
+	return &options
 }
 
 // GetKey returns CompressionOptions unique name in context object
