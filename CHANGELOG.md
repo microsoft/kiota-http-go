@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.3](https://github.com/microsoft/kiota-http-go/compare/v1.5.2...v1.5.3) (2025-04-03)
+
+
+### Bug Fixes
+
+* adding middleware with options errors with "unsupported option type" ([beeb32d](https://github.com/microsoft/kiota-http-go/commit/beeb32db1f6a5ebabfd4efdf66d701a6d12ed43f))
+
 ## [1.5.2](https://github.com/microsoft/kiota-http-go/compare/v1.5.1...v1.5.2) (2025-04-02)
 
 
