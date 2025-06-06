@@ -31,8 +31,6 @@ jobs:
         working-directory: ${{ env.relativePath }}
       - name: Run unit tests
         run: go test -coverprofile cover.out -coverpkg=./... ./...
-        env:
-          GOEXPERIMENT=synctest
         working-directory: ${{ env.relativePath }}
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v5

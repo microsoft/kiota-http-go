@@ -24,6 +24,4 @@ jobs:
         working-directory: ${{ env.relativePath }}
       - name: Test project
         run: go test ./...
-        env:
-          GOEXPERIMENT=synctest
         working-directory: ${{ env.relativePath }}
