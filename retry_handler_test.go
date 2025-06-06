@@ -4,12 +4,12 @@ import (
 	"context"
 	nethttp "net/http"
 	httptest "net/http/httptest"
+	"strconv"
 	testing "testing"
 	"time"
 
-	"strconv"
-
-	assert "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type NoopPipeline struct {
@@ -19,17 +19,20 @@ type NoopPipeline struct {
 func (pipeline *NoopPipeline) Next(req *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
 	return pipeline.client.Do(req)
 }
+
 func newNoopPipeline() *NoopPipeline {
 	return &NoopPipeline{
 		client: getDefaultClientWithoutMiddleware(),
 	}
 }
+
 func TestItCreatesANewRetryHandler(t *testing.T) {
 	handler := NewRetryHandler()
 	if handler == nil {
 		t.Error("handler is nil")
 	}
 }
+
 func TestItAddsRetryAttemptHeaders(t *testing.T) {
 	retryAttemptInt := 0
 	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
@@ -104,6 +107,35 @@ func TestItHonoursMaxRetries(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, 429, resp.StatusCode)
 	assert.Equal(t, defaultMaxRetries, retryAttemptInt)
+}
+
+func TestWithoutRetryAfterHeaderItRetriesWithExponentialBackoff(t *testing.T) {
+	retryAttemptInt := -1
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		retryAttemptInt++
+		res.WriteHeader(429)
+		_, _ = res.Write([]byte("body"))
+	}))
+	defer func() { testServer.Close() }()
+
+	handler := NewRetryHandlerWithOptions(RetryHandlerOptions{
+		ShouldRetry: func(delay time.Duration, executionCount int, request *nethttp.Request, response *nethttp.Response) bool {
+			return true
+		},
+		MaxRetries:   3,
+		DelaySeconds: 1,
+	})
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, testServer.URL, nil)
+	require.NoError(t, err)
+
+	start := time.Now()
+	_, err = handler.Intercept(newNoopPipeline(), 0, req)
+	elapsed := time.Now().Sub(start)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, retryAttemptInt)
+	assert.Greater(t, elapsed, time.Duration(1+2+4)*time.Second)
 }
 
 func TestItHonoursRetryAfterDate(t *testing.T) {
