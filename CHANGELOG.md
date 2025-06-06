@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.4](https://github.com/microsoft/kiota-http-go/compare/v1.5.3...v1.5.4) (2025-06-06)
+
+
+### Bug Fixes
+
+* retry handler exponential backoff ([#205](https://github.com/microsoft/kiota-http-go/issues/205)) ([2f2a350](https://github.com/microsoft/kiota-http-go/commit/2f2a3500e91531c248d1eb28997c4ca3bc361a85))
+
 ## [1.5.3](https://github.com/microsoft/kiota-http-go/compare/v1.5.2...v1.5.3) (2025-04-03)
 
 
