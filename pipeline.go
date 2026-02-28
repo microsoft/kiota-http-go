@@ -53,6 +53,12 @@ func (pipeline *middlewarePipeline) Next(req *nethttp.Request, middlewareIndex i
 	return pipeline.transport.RoundTrip(req)
 }
 
+// GetTransport returns the underlying transport used by the pipeline.
+// This allows middleware to access transport configuration like proxy settings.
+func (pipeline *middlewarePipeline) GetTransport() nethttp.RoundTripper {
+	return pipeline.transport
+}
+
 // RoundTrip executes the the next middleware and returns a response
 func (transport *customTransport) RoundTrip(req *nethttp.Request) (*nethttp.Response, error) {
 	return transport.middlewarePipeline.Next(req, 0)

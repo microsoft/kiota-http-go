@@ -14,6 +14,21 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// ProxyResolverFunc determines if a given URI will use a proxy.
+// Returns the proxy URL if the destination uses a proxy, or nil if no proxy
+// is used or the proxy is bypassed for this destination.
+type ProxyResolverFunc func(uri *url.URL) (*url.URL, error)
+
+// ScrubSensitiveHeadersFunc is a callback that determines which headers to
+// remove during redirects. It receives the redirect request being prepared,
+// the original URI, the new redirect URI, and a proxy resolver function.
+type ScrubSensitiveHeadersFunc func(
+	request *nethttp.Request,
+	originalURI *url.URL,
+	newURI *url.URL,
+	proxyResolver ProxyResolverFunc,
+)
+
 // RedirectHandler handles redirect responses and follows them according to the options specified.
 type RedirectHandler struct {
 	// options to use when evaluating whether to redirect or not
@@ -35,12 +50,93 @@ func NewRedirectHandlerWithOptions(options RedirectHandlerOptions) *RedirectHand
 	return &RedirectHandler{options: options}
 }
 
+// DefaultScrubSensitiveHeaders removes sensitive headers when redirecting across security boundaries.
+//
+// Removes Authorization and Cookie headers when:
+//   - Host changes (e.g., example.com -> api.example.com)
+//   - Scheme changes (e.g., https:// -> http://)
+//   - Port changes (e.g., :80 -> :8080)
+//
+// Removes Proxy-Authorization header when:
+//   - No proxy is configured (proxyResolver is nil)
+//   - Proxy is bypassed for the new destination (proxyResolver returns nil or error)
+func DefaultScrubSensitiveHeaders(
+	request *nethttp.Request,
+	originalURI *url.URL,
+	newURI *url.URL,
+	proxyResolver ProxyResolverFunc,
+) {
+	if request == nil || originalURI == nil || newURI == nil {
+		return
+	}
+
+	// Remove Authorization and Cookie headers if host, scheme, or port changes
+	isDifferentHostOrSchemeOrPort := !strings.EqualFold(newURI.Hostname(), originalURI.Hostname()) ||
+		!strings.EqualFold(newURI.Scheme, originalURI.Scheme) ||
+		newURI.Port() != originalURI.Port()
+
+	if isDifferentHostOrSchemeOrPort {
+		request.Header.Del("Authorization")
+		request.Header.Del("Cookie")
+	}
+
+	// Remove Proxy-Authorization if no proxy is configured or the destination bypasses proxy
+	isProxyInactive := proxyResolver == nil
+	if !isProxyInactive {
+		proxyURL, err := proxyResolver(newURI)
+		// Treat errors conservatively - if we can't determine proxy status, remove the header
+		isProxyInactive = (err != nil || proxyURL == nil)
+	}
+
+	if isProxyInactive {
+		request.Header.Del("Proxy-Authorization")
+	}
+}
+
+// getProxyResolverFromPipeline attempts to extract a ProxyResolverFunc from the pipeline.
+// Returns nil if no proxy is configured, pipeline doesn't provide transport access,
+// or transport is not *http.Transport.
+func getProxyResolverFromPipeline(pipeline Pipeline) ProxyResolverFunc {
+	// Try to get transport from pipeline via type assertion
+	type transportAccessor interface {
+		GetTransport() nethttp.RoundTripper
+	}
+
+	accessor, ok := pipeline.(transportAccessor)
+	if !ok {
+		return nil
+	}
+
+	transport := accessor.GetTransport()
+	if transport == nil {
+		return nil
+	}
+
+	// Extract Proxy function from http.Transport
+	httpTransport, ok := transport.(*nethttp.Transport)
+	if !ok || httpTransport.Proxy == nil {
+		return nil
+	}
+
+	// Wrap the Proxy function to match ProxyResolverFunc signature
+	return func(uri *url.URL) (*url.URL, error) {
+		// Create a minimal request for the Proxy function
+		req := &nethttp.Request{
+			URL: uri,
+		}
+		return httpTransport.Proxy(req)
+	}
+}
+
 // RedirectHandlerOptions to use when evaluating whether to redirect or not.
 type RedirectHandlerOptions struct {
 	// A callback that determines whether to redirect or not.
 	ShouldRedirect func(req *nethttp.Request, res *nethttp.Response) bool
 	// The maximum number of redirects to follow.
 	MaxRedirects int
+	// A callback that determines which headers to scrub during redirects.
+	// Defaults to DefaultScrubSensitiveHeaders if nil.
+	ScrubSensitiveHeaders ScrubSensitiveHeadersFunc
 }
 
 var redirectKeyValue = abs.RequestOptionKey{
@@ -113,7 +209,7 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 		redirectCount < reqOption.GetMaxRedirect() &&
 		shouldRedirect {
 		redirectCount++
-		redirectRequest, err := middleware.getRedirectRequest(req, response)
+		redirectRequest, err := middleware.getRedirectRequest(pipeline, req, response)
 		if err != nil {
 			return response, err
 		}
@@ -147,7 +243,11 @@ func (middleware RedirectHandler) isRedirectResponse(response *nethttp.Response)
 	return statusCode == movedPermanently || statusCode == found || statusCode == seeOther || statusCode == temporaryRedirect || statusCode == permanentRedirect
 }
 
-func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, response *nethttp.Response) (*nethttp.Request, error) {
+func (middleware RedirectHandler) getRedirectRequest(
+	pipeline Pipeline,
+	request *nethttp.Request,
+	response *nethttp.Response,
+) (*nethttp.Request, error) {
 	if request == nil || response == nil {
 		return nil, errors.New("request or response is nil")
 	}
@@ -164,16 +264,26 @@ func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, r
 	if result.Host != targetUrl.Host {
 		result.Host = targetUrl.Host
 	}
-	sameHost := strings.EqualFold(targetUrl.Host, request.URL.Host)
-	sameScheme := strings.EqualFold(targetUrl.Scheme, request.URL.Scheme)
-	if !sameHost || !sameScheme {
-		result.Header.Del("Authorization")
-	}
+
+	// Handle 303 See Other - change method and remove body-related headers
 	if response.StatusCode == seeOther {
 		result.Method = nethttp.MethodGet
 		result.Header.Del("Content-Type")
 		result.Header.Del("Content-Length")
 		result.Body = nil
 	}
+
+	// Use callback to scrub sensitive headers, defaulting if not provided
+	scrubFunc := middleware.options.ScrubSensitiveHeaders
+	if scrubFunc == nil {
+		scrubFunc = DefaultScrubSensitiveHeaders
+	}
+
+	// Get proxy resolver from pipeline
+	proxyResolver := getProxyResolverFromPipeline(pipeline)
+
+	// Call the scrub function
+	scrubFunc(result, request.URL, targetUrl, proxyResolver)
+
 	return result, nil
 }
