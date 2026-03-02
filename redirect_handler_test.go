@@ -200,7 +200,7 @@ func TestItKeepsSensitiveHeadersOnSameHostAndScheme(t *testing.T) {
 }
 
 func TestItUsesCustomScrubber(t *testing.T) {
-	customScrubber := func(request *nethttp.Request, originalURL, newURL *url.URL) {
+	customScrubber := func(request *nethttp.Request, originalURL *url.URL) {
 		// Custom logic: never remove headers
 	}
 
@@ -293,12 +293,12 @@ func TestItKeepsSensitiveHeadersOnSamePort(t *testing.T) {
 func TestDefaultScrubberHandlesNilGracefully(t *testing.T) {
 	// Should not panic with nil values
 	assert.NotPanics(t, func() {
-		DefaultScrubSensitiveHeaders(nil, nil, nil)
+		DefaultScrubSensitiveHeaders(nil, nil)
 	})
 
 	req, _ := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
 	assert.NotPanics(t, func() {
-		DefaultScrubSensitiveHeaders(req, nil, nil)
+		DefaultScrubSensitiveHeaders(req, nil)
 	})
 }
 

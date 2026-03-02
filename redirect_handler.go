@@ -40,15 +40,20 @@ func NewRedirectHandlerWithOptions(options RedirectHandlerOptions) *RedirectHand
 }
 
 // ScrubSensitiveHeaders is a callback function type for scrubbing sensitive headers during redirects.
-// It receives the request to modify and the original and new URLs for comparison.
-type ScrubSensitiveHeaders func(request *nethttp.Request, originalURL, newURL *url.URL)
+// It receives the request to modify (which contains the new URL) and the original URL for comparison.
+type ScrubSensitiveHeaders func(request *nethttp.Request, originalURL *url.URL)
 
 // DefaultScrubSensitiveHeaders is the default implementation for scrubbing sensitive headers during redirects.
 // This function removes Authorization and Cookie headers when the host, scheme, or port changes.
 // Note: Proxy-Authorization is not handled here as proxy configuration in Go's net/http
 // is managed at the transport level and not accessible to middleware.
-var DefaultScrubSensitiveHeaders ScrubSensitiveHeaders = func(request *nethttp.Request, originalURL, newURL *url.URL) {
-	if request == nil || originalURL == nil || newURL == nil {
+var DefaultScrubSensitiveHeaders ScrubSensitiveHeaders = func(request *nethttp.Request, originalURL *url.URL) {
+	if request == nil || originalURL == nil {
+		return
+	}
+
+	newURL := request.URL
+	if newURL == nil {
 		return
 	}
 
@@ -212,7 +217,7 @@ func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, r
 	// Scrub sensitive headers before following the redirect
 	scrubber := middleware.options.GetScrubSensitiveHeaders()
 	if scrubber != nil {
-		scrubber(result, request.URL, targetUrl)
+		scrubber(result, request.URL)
 	}
 
 	if response.StatusCode == seeOther {
