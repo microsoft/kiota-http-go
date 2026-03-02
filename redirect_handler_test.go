@@ -236,6 +236,60 @@ func TestItUsesCustomScrubber(t *testing.T) {
 	assert.Equal(t, "session=SECRET", result.Header.Get("Cookie"))
 }
 
+func TestItStripsSensitiveHeadersOnPortChange(t *testing.T) {
+	handler := NewRedirectHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "http://example.org:8080/foo", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("Cookie", "session=SECRET")
+
+	resp := &nethttp.Response{
+		StatusCode: 301,
+		Header:     nethttp.Header{},
+	}
+	resp.Header.Set("Location", "http://example.org:9090/bar")
+
+	result, err := handler.getRedirectRequest(req, resp)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.NotNil(t, result)
+	assert.Equal(t, "example.org:9090", result.URL.Host)
+	assert.Equal(t, "", result.Header.Get("Authorization"))
+	assert.Equal(t, "", result.Header.Get("Cookie"))
+}
+
+func TestItKeepsSensitiveHeadersOnSamePort(t *testing.T) {
+	handler := NewRedirectHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "http://example.org:8080/foo", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Set("Cookie", "session=SECRET")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp := &nethttp.Response{
+		StatusCode: 302,
+		Header:     nethttp.Header{},
+	}
+	resp.Header.Set("Location", "http://example.org:8080/bar")
+
+	result, err := handler.getRedirectRequest(req, resp)
+	if err != nil {
+		t.Error(err)
+	}
+
+	assert.NotNil(t, result)
+	assert.Equal(t, "example.org:8080", result.URL.Host)
+	assert.Equal(t, "Bearer token", result.Header.Get("Authorization"))
+	assert.Equal(t, "session=SECRET", result.Header.Get("Cookie"))
+	assert.Equal(t, "application/json", result.Header.Get("Content-Type"))
+}
+
 func TestDefaultScrubberHandlesNilGracefully(t *testing.T) {
 	// Should not panic with nil values
 	assert.NotPanics(t, func() {

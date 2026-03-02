@@ -44,7 +44,7 @@ func NewRedirectHandlerWithOptions(options RedirectHandlerOptions) *RedirectHand
 type ScrubSensitiveHeaders func(request *nethttp.Request, originalURL, newURL *url.URL)
 
 // DefaultScrubSensitiveHeaders is the default implementation for scrubbing sensitive headers during redirects.
-// This function removes Authorization and Cookie headers when the host or scheme changes.
+// This function removes Authorization and Cookie headers when the host, scheme, or port changes.
 // Note: Proxy-Authorization is not handled here as proxy configuration in Go's net/http
 // is managed at the transport level and not accessible to middleware.
 var DefaultScrubSensitiveHeaders ScrubSensitiveHeaders = func(request *nethttp.Request, originalURL, newURL *url.URL) {
@@ -52,11 +52,12 @@ var DefaultScrubSensitiveHeaders ScrubSensitiveHeaders = func(request *nethttp.R
 		return
 	}
 
-	// Remove Authorization and Cookie headers if the request's scheme or host changes
-	isDifferentHostOrScheme := !strings.EqualFold(originalURL.Host, newURL.Host) ||
-		!strings.EqualFold(originalURL.Scheme, newURL.Scheme)
+	// Remove Authorization and Cookie headers if the request's scheme, host, or port changes
+	isDifferentOrigin := !strings.EqualFold(originalURL.Host, newURL.Host) ||
+		!strings.EqualFold(originalURL.Scheme, newURL.Scheme) ||
+		originalURL.Port() != newURL.Port()
 
-	if isDifferentHostOrScheme {
+	if isDifferentOrigin {
 		request.Header.Del("Authorization")
 		request.Header.Del("Cookie")
 	}
