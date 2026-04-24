@@ -213,7 +213,7 @@ func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cancel := context.CancelFunc(func() {})
+	cancel := func() {}
 	// set deadline if not set in receiving context
 	// ignore if timeout is 0 as it means no timeout
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet && a.httpClient.Timeout != 0 {
