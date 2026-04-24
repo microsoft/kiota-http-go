@@ -42,7 +42,7 @@ func TestGetDefaultMiddleWareWithMultipleOptions(t *testing.T) {
 		&headersInspectionOptions,
 	)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err)
 	}
 	if len(options) != 6 {
 		t.Errorf("expected 6 middleware, got %v", len(options))
@@ -80,7 +80,7 @@ func TestGetDefaultMiddleWareWithOptionsDeprecated(t *testing.T) {
 
 func verifyMiddlewareWithDisabledCompression(t *testing.T, options []Middleware, err error) {
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err)
 	}
 	if len(options) != 6 {
 		t.Errorf("expected 6 middleware, got %v", len(options))
