@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.6](https://github.com/microsoft/kiota-http-go/compare/v1.5.5...v1.5.6) (2026-04-24)
+
+
+### Bug Fixes
+
+* resolve build errors - non-constant format string and context leak ([c3bf426](https://github.com/microsoft/kiota-http-go/commit/c3bf426fb110f8ce7b1e8384d9ab10bde2f07317))
+
 ## [1.5.5](https://github.com/microsoft/kiota-http-go/compare/v1.5.4...v1.5.5) (2026-03-02)
 
 
