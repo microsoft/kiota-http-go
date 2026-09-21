@@ -20,6 +20,10 @@ If major functionality is being added, or there will need to be gestation time f
 
 Revisions of this nature will result in a 0.X.X change of the version number.
 
+## Changelog updates
+
+The changelog is generated automatically as part of the release process. Do not update `CHANGELOG.md` in pull requests.
+
 ## Commit message format
 
 To support our automated release process, pull requests are required to follow the [Conventional Commit](https://www.conventionalcommits.org/en/v1.0.0/)
