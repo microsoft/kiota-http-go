@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.7](https://github.com/microsoft/kiota-http-go/compare/v1.5.6...v1.5.7) (2026-10-06)
+
+
+### Bug Fixes
+
+* Fixing redirect 301 handling ([7e96285](https://github.com/microsoft/kiota-http-go/commit/7e9628504b0d39a5525c80244c7b45904d944b5a))
+
 ## [1.5.6](https://github.com/microsoft/kiota-http-go/compare/v1.5.5...v1.5.6) (2026-04-24)
 
 
