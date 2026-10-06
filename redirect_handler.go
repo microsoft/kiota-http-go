@@ -132,6 +132,8 @@ const temporaryRedirect = 307
 const permanentRedirect = 308
 const locationHeader = "Location"
 
+var errRedirectBodyNotReplayable = errors.New("redirect request body cannot be replayed")
+
 // Intercept implements the interface and evaluates whether to follow a redirect response.
 func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
 	obsOptions := GetObservabilityOptionsFromRequest(req)
@@ -164,6 +166,9 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 		redirectCount++
 		redirectRequest, err := middleware.getRedirectRequest(req, response)
 		if err != nil {
+			if errors.Is(err, errRedirectBodyNotReplayable) {
+				return response, nil
+			}
 			return response, err
 		}
 		if observabilityName != "" {
@@ -214,17 +219,58 @@ func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, r
 		result.Host = targetUrl.Host
 	}
 
+	redirectMethod, includeBody := getRedirectMethodAndBody(request.Method, response.StatusCode)
+	result.Method = redirectMethod
+	if includeBody {
+		if request.Body != nil && request.Body != nethttp.NoBody {
+			if request.GetBody == nil {
+				return nil, errRedirectBodyNotReplayable
+			}
+			result.Body, err = request.GetBody()
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else if request.Body != nil && request.Body != nethttp.NoBody || redirectMethod != request.Method {
+		dropRedirectRequestBody(result)
+	}
+
 	// Scrub sensitive headers before following the redirect
 	scrubber := middleware.options.GetScrubSensitiveHeaders()
 	if scrubber != nil {
 		scrubber(result, request.URL)
 	}
 
-	if response.StatusCode == seeOther {
-		result.Method = nethttp.MethodGet
-		result.Header.Del("Content-Type")
-		result.Header.Del("Content-Length")
-		result.Body = nil
-	}
 	return result, nil
+}
+
+func getRedirectMethodAndBody(method string, statusCode int) (string, bool) {
+	switch statusCode {
+	case movedPermanently, found, seeOther:
+		if method != nethttp.MethodGet && method != nethttp.MethodHead {
+			return nethttp.MethodGet, false
+		}
+		return method, false
+	case temporaryRedirect, permanentRedirect:
+		return method, true
+	default:
+		return method, true
+	}
+}
+
+func dropRedirectRequestBody(request *nethttp.Request) {
+	request.Body = nil
+	request.GetBody = nil
+	request.ContentLength = 0
+	request.TransferEncoding = nil
+	request.Trailer = nil
+	for _, header := range []string{
+		"Content-Length",
+		"Transfer-Encoding",
+		"Content-Type",
+		"Content-Encoding",
+		"Content-Language",
+	} {
+		request.Header.Del(header)
+	}
 }
