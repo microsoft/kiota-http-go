@@ -14,7 +14,48 @@ import (
 	"github.com/microsoft/kiota-http-go/internal"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestSendWithResponseContentTypeWhitespace(t *testing.T) {
+	for _, contentType := range []string{
+		"application/json",
+		"application/json;charset=utf-8",
+		"Application/JSON; charset=utf-8",
+		"application/json ; charset=utf-8",
+		"application/json\t; charset=utf-8",
+		"Application/JSON \t; charset=utf-8",
+		"application/problem+json \t; charset=utf-8",
+	} {
+		t.Run(contentType, func(t *testing.T) {
+			server := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+				res.Header().Set("Content-Type", contentType)
+				_, _ = res.Write([]byte(`{}`))
+			}))
+			defer server.Close()
+
+			registry := serialization.NewParseNodeFactoryRegistry()
+			registry.ContentTypeAssociatedFactories["application/json"] = &internal.MockParseNodeFactory{}
+			adapter, err := NewNetHttpRequestAdapterWithParseNodeFactory(&absauth.AnonymousAuthenticationProvider{}, registry)
+			require.NoError(t, err)
+			uri, err := url.Parse(server.URL)
+			require.NoError(t, err)
+			request := abs.NewRequestInformation()
+			request.SetUri(*uri)
+			request.Method = abs.GET
+
+			result, err := adapter.Send(context.Background(), request, nil, nil)
+			require.NoError(t, err)
+			assert.NotNil(t, result)
+		})
+	}
+}
+
+func TestResponsePrimaryContentTypeWithEmptyHeaders(t *testing.T) {
+	adapter := &NetHttpRequestAdapter{}
+	assert.Empty(t, adapter.getResponsePrimaryContentType(&nethttp.Response{}))
+	assert.Empty(t, adapter.getResponsePrimaryContentType(&nethttp.Response{Header: nethttp.Header{}}))
+}
 
 func TestItRetriesOnCAEResponse(t *testing.T) {
 	methodCallCount := 0

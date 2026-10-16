@@ -202,7 +202,7 @@ func (a *NetHttpRequestAdapter) getResponsePrimaryContentType(response *nethttp.
 	}
 	rawType := response.Header.Get("Content-Type")
 	splat := strings.Split(rawType, ";")
-	return strings.ToLower(splat[0])
+	return strings.ToLower(strings.TrimSpace(splat[0]))
 }
 
 func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs.RequestInformation) {
