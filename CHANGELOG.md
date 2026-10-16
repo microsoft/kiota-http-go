@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.8](https://github.com/microsoft/kiota-http-go/compare/v1.5.7...v1.5.8) (2026-10-16)
+
+
+### Bug Fixes
+
+* trim response media types before parser lookup ([3289281](https://github.com/microsoft/kiota-http-go/commit/32892818f847672a79d3a45e70098281411f6dfb))
+* trim response media types before parser lookup ([3033fb6](https://github.com/microsoft/kiota-http-go/commit/3033fb6c57f06ecd1427c7402a8d463c0dccf2cd))
+
 ## [1.5.7](https://github.com/microsoft/kiota-http-go/compare/v1.5.6...v1.5.7) (2026-10-06)
 
 

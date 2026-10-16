@@ -44,7 +44,7 @@ func NewUserAgentHandlerOptions() *UserAgentHandlerOptions {
 		ProductName: "kiota-go",
 		/** The package version */
 		// x-release-please-start-version
-		ProductVersion: "1.5.7",
+		ProductVersion: "1.5.8",
 		// x-release-please-end
 	}
 }
