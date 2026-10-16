@@ -172,7 +172,7 @@ func (middleware RetryHandler) isRetriableErrorCode(code int) bool {
 	return code == tooManyRequests || code == serviceUnavailable || code == gatewayTimeout
 }
 func (middleware RetryHandler) isRetriableRequest(req *nethttp.Request) bool {
-	isBodiedMethod := req.Method == "POST" || req.Method == "PUT" || req.Method == "PATCH"
+	isBodiedMethod := req.Method == "POST" || req.Method == "PUT" || req.Method == "PATCH" || req.Method == "QUERY"
 	if isBodiedMethod && req.Body != nil {
 		return req.ContentLength != -1
 	}
