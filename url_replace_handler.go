@@ -16,9 +16,22 @@ type UrlReplaceHandler struct {
 	options UrlReplaceOptions
 }
 
-// NewUrlReplaceHandler creates a configuration object for the CompressionHandler
+// NewUrlReplaceOptions creates a new UrlReplaceOptions with default options
+func NewUrlReplaceOptions() *UrlReplaceOptions {
+	return &UrlReplaceOptions{
+		Enabled:          true,
+		ReplacementPairs: nil,
+	}
+}
+
+// NewUrlReplaceHandler creates a new UrlReplaceHandler with the specified settings
 func NewUrlReplaceHandler(enabled bool, replacementPairs map[string]string) *UrlReplaceHandler {
 	return &UrlReplaceHandler{UrlReplaceOptions{Enabled: enabled, ReplacementPairs: replacementPairs}}
+}
+
+// NewUrlReplaceHandlerWithOptions creates a new UrlReplaceHandler with the given options
+func NewUrlReplaceHandlerWithOptions(options UrlReplaceOptions) *UrlReplaceHandler {
+	return &UrlReplaceHandler{options: options}
 }
 
 // UrlReplaceOptions is a configuration object for the UrlReplaceHandler middleware
