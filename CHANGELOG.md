@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.9](https://github.com/microsoft/kiota-http-go/compare/v1.5.8...v1.5.9) (2026-10-19)
+
+
+### Bug Fixes
+
+* **http:** add uri replacement handler to default middlewares ([fb1decb](https://github.com/microsoft/kiota-http-go/commit/fb1decbb216041afe6561cde864c0824da1c14bf))
+* **http:** add uri replacement handler to default middlewares ([#186](https://github.com/microsoft/kiota-http-go/issues/186)) ([8b6cf64](https://github.com/microsoft/kiota-http-go/commit/8b6cf6467235b0879761dcf6404907d530d6ea87))
+
 ## [1.5.8](https://github.com/microsoft/kiota-http-go/compare/v1.5.7...v1.5.8) (2026-10-16)
 
 
