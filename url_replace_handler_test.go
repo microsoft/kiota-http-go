@@ -42,3 +42,23 @@ func TestURLReplacementHandler(t *testing.T) {
 
 	assert.Equal(t, pipeline.GetReceivedRequest().URL.Path, "/me/contactFolders")
 }
+
+func TestNewUrlReplaceOptions(t *testing.T) {
+	options := NewUrlReplaceOptions()
+	assert.NotNil(t, options)
+	assert.True(t, options.IsEnabled())
+	assert.Nil(t, options.GetReplacementPairs())
+	assert.Equal(t, options.GetKey(), urlReplaceOptionKey)
+}
+
+func TestNewUrlReplaceHandlerWithOptions(t *testing.T) {
+	options := UrlReplaceOptions{
+		Enabled:          true,
+		ReplacementPairs: map[string]string{"foo": "bar"},
+	}
+	handler := NewUrlReplaceHandlerWithOptions(options)
+	assert.NotNil(t, handler)
+	assert.True(t, handler.options.IsEnabled())
+	assert.Equal(t, handler.options.GetReplacementPairs(), map[string]string{"foo": "bar"})
+}
+

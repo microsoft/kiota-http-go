@@ -107,6 +107,8 @@ func GetDefaultMiddlewaresWithOptions(requestOptions ...abs.RequestOption) ([]Mi
 			middlewareMap[userAgentKeyValue] = NewUserAgentHandlerWithOptions(v)
 		case *HeadersInspectionOptions:
 			middlewareMap[headersInspectionKeyValue] = NewHeadersInspectionHandlerWithOptions(*v)
+		case *UrlReplaceOptions:
+			middlewareMap[urlReplaceOptionKey] = NewUrlReplaceHandlerWithOptions(*v)
 		default:
 			// none of the above types
 			return nil, errors.New("unsupported option type")
@@ -137,6 +139,9 @@ func getDefaultMiddleWare(middlewareMap map[abs.RequestOptionKey]Middleware) []M
 		},
 		headersInspectionKeyValue: func() Middleware {
 			return NewHeadersInspectionHandler()
+		},
+		urlReplaceOptionKey: func() Middleware {
+			return NewUrlReplaceHandlerWithOptions(*NewUrlReplaceOptions())
 		},
 	}
 

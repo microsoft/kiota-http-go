@@ -34,24 +34,32 @@ func TestGetDefaultMiddleWareWithMultipleOptions(t *testing.T) {
 		RequestHeaders:  abstractions.NewRequestHeaders(),
 		ResponseHeaders: abstractions.NewResponseHeaders(),
 	}
+	urlReplaceOptions := UrlReplaceOptions{
+		Enabled:          true,
+		ReplacementPairs: map[string]string{"/users/me-token-to-replace": "/me"},
+	}
 	options, err := GetDefaultMiddlewaresWithOptions(&retryOptions,
 		&redirectHandlerOptions,
 		compressionOptions,
 		&parametersNameDecodingOptions,
 		&userAgentHandlerOptions,
 		&headersInspectionOptions,
+		&urlReplaceOptions,
 	)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(options) != 6 {
-		t.Errorf("expected 6 middleware, got %v", len(options))
+	if len(options) != 7 {
+		t.Errorf("expected 7 middleware, got %v", len(options))
 	}
 
 	for _, element := range options {
 		switch v := element.(type) {
 		case *CompressionHandler:
 			assert.Equal(t, v.options.ShouldCompress(), compressionOptions.ShouldCompress())
+		case *UrlReplaceHandler:
+			assert.Equal(t, v.options.IsEnabled(), urlReplaceOptions.IsEnabled())
+			assert.Equal(t, v.options.GetReplacementPairs(), urlReplaceOptions.GetReplacementPairs())
 		}
 	}
 }
@@ -82,8 +90,8 @@ func verifyMiddlewareWithDisabledCompression(t *testing.T, options []Middleware,
 	if err != nil {
 		t.Error(err)
 	}
-	if len(options) != 6 {
-		t.Errorf("expected 6 middleware, got %v", len(options))
+	if len(options) != 7 {
+		t.Errorf("expected 7 middleware, got %v", len(options))
 	}
 	for _, element := range options {
 		switch v := element.(type) {
@@ -95,14 +103,17 @@ func verifyMiddlewareWithDisabledCompression(t *testing.T, options []Middleware,
 
 func TestGetDefaultMiddlewares(t *testing.T) {
 	options := GetDefaultMiddlewares()
-	if len(options) != 6 {
-		t.Errorf("expected 6 middleware, got %v", len(options))
+	if len(options) != 7 {
+		t.Errorf("expected 7 middleware, got %v", len(options))
 	}
 
 	for _, element := range options {
 		switch v := element.(type) {
 		case *CompressionHandler:
 			assert.True(t, v.options.ShouldCompress())
+		case *UrlReplaceHandler:
+			assert.True(t, v.options.IsEnabled())
+			assert.Nil(t, v.options.GetReplacementPairs())
 		}
 	}
 }
