@@ -449,3 +449,83 @@ func TestRedirectDropsBodyHeadersAndSensitiveHeadersAcrossOrigins(t *testing.T) 
 	assert.Empty(t, result.Header.Get("Authorization"))
 	assert.Empty(t, result.Header.Get("Cookie"))
 }
+
+func TestRedirectResolvesRelativeReferences(t *testing.T) {
+	handler := NewRedirectHandler()
+
+	testCases := []struct {
+		name        string
+		baseURL     string
+		location    string
+		expectedURL string
+	}{
+		{
+			name:        "root relative",
+			baseURL:     "https://example.com/api/v1/users",
+			location:    "/v2/items",
+			expectedURL: "https://example.com/v2/items",
+		},
+		{
+			name:        "relative path without leading slash",
+			baseURL:     "https://example.com/api/v1/users",
+			location:    "details",
+			expectedURL: "https://example.com/api/v1/details",
+		},
+		{
+			name:        "dot slash relative path",
+			baseURL:     "https://example.com/api/v1/users",
+			location:    "./profile",
+			expectedURL: "https://example.com/api/v1/profile",
+		},
+		{
+			name:        "parent relative path",
+			baseURL:     "https://example.com/api/v1/users",
+			location:    "../auth",
+			expectedURL: "https://example.com/api/auth",
+		},
+		{
+			name:        "query string relative",
+			baseURL:     "https://example.com/api/v1/users",
+			location:    "?page=2",
+			expectedURL: "https://example.com/api/v1/users?page=2",
+		},
+		{
+			name:        "absolute url unchanged",
+			baseURL:     "https://example.com/api/v1/users",
+			location:    "https://other.example.com/callback",
+			expectedURL: "https://other.example.com/callback",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := nethttp.NewRequest(nethttp.MethodGet, tc.baseURL, nil)
+			assert.NoError(t, err)
+
+			resp := &nethttp.Response{
+				StatusCode: found,
+				Header:     nethttp.Header{"Location": []string{tc.location}},
+			}
+
+			result, err := handler.getRedirectRequest(req, resp)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedURL, result.URL.String())
+			assert.Equal(t, result.URL.Host, result.Host)
+		})
+	}
+}
+
+func TestRedirectMissingLocationReturnsError(t *testing.T) {
+	handler := NewRedirectHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/test", nil)
+	assert.NoError(t, err)
+
+	resp := &nethttp.Response{
+		StatusCode: found,
+		Header:     nethttp.Header{},
+	}
+	result, err := handler.getRedirectRequest(req, resp)
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
