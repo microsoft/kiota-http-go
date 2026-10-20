@@ -206,14 +206,20 @@ func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, r
 		return nil, errors.New("request or response is nil")
 	}
 	locationHeaderValue := response.Header.Get(locationHeader)
-	if locationHeaderValue[0] == '/' {
-		locationHeaderValue = request.URL.Scheme + "://" + request.URL.Host + locationHeaderValue
+	if locationHeaderValue == "" {
+		return nil, errors.New("missing location header for redirect")
 	}
-	result := request.Clone(request.Context())
 	targetUrl, err := url.Parse(locationHeaderValue)
 	if err != nil {
 		return nil, err
 	}
+	if !targetUrl.IsAbs() {
+		if request.URL == nil {
+			return nil, errors.New("request URL is nil")
+		}
+		targetUrl = request.URL.ResolveReference(targetUrl)
+	}
+	result := request.Clone(request.Context())
 	result.URL = targetUrl
 	if result.Host != targetUrl.Host {
 		result.Host = targetUrl.Host
