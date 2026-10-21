@@ -64,6 +64,7 @@ func (transport *customTransport) RoundTrip(req *nethttp.Request) (*nethttp.Resp
 		ctx = context.Background()
 	}
 	reqCopy := req.Clone(ctx)
+	reqCopy.Trailer = req.Trailer
 	return transport.middlewarePipeline.Next(reqCopy, 0)
 }
 

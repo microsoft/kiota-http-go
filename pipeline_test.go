@@ -2,7 +2,9 @@ package nethttplibrary
 
 import (
 	assert "github.com/stretchr/testify/assert"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -69,4 +71,62 @@ func TestItAcceptsACustomizedTransport(t *testing.T) {
 func TestItGetsADefaultTransportIfNoneIsProvided(t *testing.T) {
 	customTransport := NewCustomTransport()
 	assert.NotNil(t, customTransport.middlewarePipeline.transport)
+}
+
+type eofTrailerBody struct {
+	data     []byte
+	trailer  http.Header
+	key      string
+	value    string
+	readDone bool
+}
+
+func (b *eofTrailerBody) Read(p []byte) (int, error) {
+	if !b.readDone {
+		b.readDone = true
+		n := copy(p, b.data)
+		return n, nil
+	}
+	b.trailer.Set(b.key, b.value)
+	return 0, io.EOF
+}
+
+func (b *eofTrailerBody) Close() error {
+	return nil
+}
+
+func TestRoundTripPreservesTrailersPopulatedAtEOF(t *testing.T) {
+	var receivedTrailer string
+	testServer := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		_, err := io.ReadAll(req.Body)
+		assert.NoError(t, err)
+		receivedTrailer = req.Trailer.Get("X-Checksum")
+		res.WriteHeader(http.StatusOK)
+	}))
+	defer testServer.Close()
+
+	originalTrailer := make(http.Header)
+	originalTrailer.Add("X-Checksum", "")
+
+	body := &eofTrailerBody{
+		data:    []byte("streaming chunked payload"),
+		trailer: originalTrailer,
+		key:     "X-Checksum",
+		value:   "sha256-eof-checksum-value",
+	}
+
+	req, err := http.NewRequest(http.MethodPost, testServer.URL, body)
+	assert.NoError(t, err)
+	req.ContentLength = -1
+	req.Trailer = originalTrailer
+
+	transport := NewCustomTransport(&TestMiddleware{})
+	client := &http.Client{Transport: transport}
+
+	resp, err := client.Do(req)
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "sha256-eof-checksum-value", receivedTrailer)
 }
