@@ -73,3 +73,65 @@ func TestItGetsResponseHeaders(t *testing.T) {
 	assert.Equal(t, "test", options.GetResponseHeaders().Get("test")[0])
 	assert.Empty(t, options.GetRequestHeaders().ListKeys())
 }
+func TestHeadersInspectionWithEmptyHeaderValuesDoesNotPanic(t *testing.T) {
+	options := NewHeadersInspectionOptions()
+	options.InspectRequestHeaders = true
+	options.InspectResponseHeaders = true
+	handler := NewHeadersInspectionHandlerWithOptions(*options)
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.Header()["empty-res-header"] = []string{}
+		res.Header().Add("valid-res-header", "valid")
+		res.WriteHeader(200)
+		res.Write([]byte("body"))
+	}))
+	defer testServer.Close()
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, testServer.URL, nil)
+	assert.NoError(t, err)
+	req.Header["empty-req-header"] = []string{}
+	req.Header.Add("valid-req-header", "valid")
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+
+	assert.Equal(t, "valid", options.GetRequestHeaders().Get("valid-req-header")[0])
+	assert.Equal(t, "valid", options.GetResponseHeaders().Get("valid-res-header")[0])
+}
+
+func TestHeadersInspectionNilRequestDoesNotPanic(t *testing.T) {
+	handler := NewHeadersInspectionHandler()
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(newNoopPipeline(), 0, nil)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}
+
+func TestHeadersInspectionNilHeadersOptionsDoesNotPanic(t *testing.T) {
+	options := &HeadersInspectionOptions{
+		InspectRequestHeaders:  true,
+		InspectResponseHeaders: true,
+		RequestHeaders:         nil,
+		ResponseHeaders:        nil,
+	}
+	handler := NewHeadersInspectionHandlerWithOptions(*options)
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.Header().Add("res-header", "res-val")
+		res.WriteHeader(200)
+		res.Write([]byte("body"))
+	}))
+	defer testServer.Close()
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, testServer.URL, nil)
+	assert.NoError(t, err)
+	req.Header.Add("req-header", "req-val")
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+}
