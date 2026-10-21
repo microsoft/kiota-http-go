@@ -423,3 +423,58 @@ func TestCompressionHandler415FallbackUpdatesOriginalRequestConsistent(t *testin
 	assert.NoError(t, err)
 	assert.Equal(t, postBody, data)
 }
+
+func TestNativeClientRedirectWithCompression(t *testing.T) {
+	for _, statusCode := range []int{307, 308} {
+		t.Run(strconv.Itoa(statusCode), func(t *testing.T) {
+			postBody := []byte("payload for testing native http client redirect with compression")
+			firstReqReceived := false
+			redirectReqReceived := false
+
+			testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+				if req.URL.Path == "/redirected" {
+					redirectReqReceived = true
+					assert.Equal(t, nethttp.MethodPost, req.Method)
+					assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"))
+
+					rawBody, err := io.ReadAll(req.Body)
+					assert.NoError(t, err)
+					assert.NotEqual(t, postBody, rawBody, "redirected body must be compressed")
+
+					gzReader, err := gzip.NewReader(bytes.NewReader(rawBody))
+					assert.NoError(t, err)
+					defer gzReader.Close()
+					decompressed, err := io.ReadAll(gzReader)
+					assert.NoError(t, err)
+					assert.Equal(t, postBody, decompressed, "one decompression must yield original payload without double compression")
+
+					res.WriteHeader(nethttp.StatusOK)
+					res.Write([]byte("ok"))
+					return
+				}
+
+				firstReqReceived = true
+				assert.Equal(t, nethttp.MethodPost, req.Method)
+				assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"))
+				res.Header().Set("Location", "/redirected")
+				res.WriteHeader(statusCode)
+			}))
+			defer testServer.Close()
+
+			transport := NewCustomTransport(NewCompressionHandler())
+			client := &nethttp.Client{Transport: transport}
+
+			req, err := nethttp.NewRequest(nethttp.MethodPost, testServer.URL, bytes.NewReader(postBody))
+			assert.NoError(t, err)
+
+			resp, err := client.Do(req)
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			defer resp.Body.Close()
+
+			assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+			assert.True(t, firstReqReceived, "initial request must reach server")
+			assert.True(t, redirectReqReceived, "redirected request must reach server")
+		})
+	}
+}

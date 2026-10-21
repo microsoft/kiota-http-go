@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"context"
 	nethttp "net/http"
 
 	"go.opentelemetry.io/otel"
@@ -55,7 +56,15 @@ func (pipeline *middlewarePipeline) Next(req *nethttp.Request, middlewareIndex i
 
 // RoundTrip executes the the next middleware and returns a response
 func (transport *customTransport) RoundTrip(req *nethttp.Request) (*nethttp.Response, error) {
-	return transport.middlewarePipeline.Next(req, 0)
+	if req == nil {
+		return nil, nethttp.ErrNotSupported
+	}
+	ctx := req.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reqCopy := req.Clone(ctx)
+	return transport.middlewarePipeline.Next(reqCopy, 0)
 }
 
 // GetDefaultTransport returns the default http transport used by the library
