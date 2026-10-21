@@ -72,9 +72,19 @@ func (o CompressionOptions) ShouldCompress() bool {
 // Intercept is invoked by the middleware pipeline to either move the request/response
 // to the next middleware in the pipeline
 func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *http.Request) (*http.Response, error) {
-	reqOption, ok := req.Context().Value(compressKey).(compression)
-	if !ok {
-		reqOption = c.options
+	if req == nil {
+		return nil, http.ErrNotSupported
+	}
+	var reqOption compression
+	if req.Context() != nil {
+		reqOption, _ = req.Context().Value(compressKey).(compression)
+	}
+	if reqOption == nil {
+		if c != nil {
+			reqOption = c.options
+		} else {
+			reqOption = CompressionOptions{}
+		}
 	}
 
 	obsOptions := GetObservabilityOptionsFromRequest(req)
@@ -114,6 +124,10 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Body = compressedBody
 	req.ContentLength = int64(size)
+	req.GetBody = func() (io.ReadCloser, error) {
+		r, _, err := compressReqBody(unCompressedBody)
+		return r, err
+	}
 
 	if span != nil {
 		span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)))
@@ -127,9 +141,16 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 
 	// If response has status 415 retry request with uncompressed body
 	if resp.StatusCode == 415 {
-		delete(req.Header, "Content-Encoding")
+		if resp.Body != nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+		}
+		req.Header.Del("Content-Encoding")
 		req.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
 		req.ContentLength = unCompressedContentLength
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(unCompressedBody)), nil
+		}
 
 		if span != nil {
 			span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)),
