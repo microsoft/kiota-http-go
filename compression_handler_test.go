@@ -8,6 +8,7 @@ import (
 	"net/http"
 	nethttp "net/http"
 	httptest "net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -167,4 +168,66 @@ func TestCompressionHandlerWorksWithEmptyBody(t *testing.T) {
 func TestResetTransport(t *testing.T) {
 	client := getDefaultClientWithoutMiddleware()
 	client.Transport = &nethttp.Transport{}
+}
+
+func TestCompressionHandlerUpdatesGetBodyAndCloses415ResponseBody(t *testing.T) {
+	postBody := []byte("payload to compress and test")
+	req, err := nethttp.NewRequest("POST", "https://example.com/test", bytes.NewReader(postBody))
+	assert.NoError(t, err)
+
+	handler := NewCompressionHandler()
+	body415 := &trackingReadCloser{Reader: strings.NewReader("unsupported media type"), closed: false}
+	resp415 := &nethttp.Response{
+		StatusCode: 415,
+		Header:     nethttp.Header{},
+		Body:       body415,
+	}
+
+	body200 := &trackingReadCloser{Reader: strings.NewReader("success"), closed: false}
+	resp200 := &nethttp.Response{
+		StatusCode: 200,
+		Header:     nethttp.Header{},
+		Body:       body200,
+	}
+
+	callCount := 0
+	pipeline := &testFuncPipeline{
+		next: func(r *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+				assert.NotNil(t, r.GetBody)
+				replayedCompressed, getErr := r.GetBody()
+				assert.NoError(t, getErr)
+				defer replayedCompressed.Close()
+				data, readErr := io.ReadAll(replayedCompressed)
+				assert.NoError(t, readErr)
+				assert.NotEmpty(t, data)
+				return resp415, nil
+			}
+			assert.Empty(t, r.Header.Get("Content-Encoding"))
+			assert.NotNil(t, r.GetBody)
+			replayedUncompressed, getErr := r.GetBody()
+			assert.NoError(t, getErr)
+			defer replayedUncompressed.Close()
+			data, readErr := io.ReadAll(replayedUncompressed)
+			assert.NoError(t, readErr)
+			assert.Equal(t, string(postBody), string(data))
+			return resp200, nil
+		},
+	}
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, 2, callCount)
+	assert.True(t, body415.closed, "415 response body must be closed on retry")
+	assert.False(t, body200.closed, "final 200 response body must remain open")
+}
+
+func TestCompressionHandlerHandlesNilRequest(t *testing.T) {
+	var nilHandler *CompressionHandler
+	resp, err := nilHandler.Intercept(newNoopPipeline(), 0, nil)
+	assert.Error(t, err)
+	assert.Nil(t, resp)
 }
