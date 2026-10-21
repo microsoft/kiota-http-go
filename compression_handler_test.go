@@ -3,12 +3,14 @@ package nethttplibrary
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	nethttp "net/http"
 	httptest "net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -310,4 +312,114 @@ func TestCompressionHandlerClosesUnknownLengthAndLarge415ResponseBodyWithoutRead
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.True(t, bodyLarge.closed, "415 large body must be closed")
 	assert.Equal(t, 0, bodyLarge.readCount, "415 large body must not be read to prevent hangs")
+}
+
+
+func TestRedirectWithCompressionAndObservability(t *testing.T) {
+	for _, statusCode := range []int{307, 308} {
+		t.Run(strconv.Itoa(statusCode), func(t *testing.T) {
+			postBody := []byte("this is a test payload that will be compressed and redirected")
+			firstReqReceived := false
+			redirectReqReceived := false
+
+			testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+				if req.URL.Path == "/redirected" {
+					redirectReqReceived = true
+					assert.Equal(t, nethttp.MethodPost, req.Method)
+					assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"))
+
+					rawBody, err := io.ReadAll(req.Body)
+					assert.NoError(t, err)
+					assert.NotEqual(t, postBody, rawBody, "redirected body must be compressed, not plain uncompressed bytes")
+					assert.Equal(t, int64(len(rawBody)), req.ContentLength)
+
+					gzReader, err := gzip.NewReader(bytes.NewReader(rawBody))
+					assert.NoError(t, err)
+					defer gzReader.Close()
+					decompressed, err := io.ReadAll(gzReader)
+					assert.NoError(t, err)
+					assert.Equal(t, postBody, decompressed)
+
+					res.WriteHeader(nethttp.StatusOK)
+					res.Write([]byte("ok"))
+					return
+				}
+
+				firstReqReceived = true
+				assert.Equal(t, nethttp.MethodPost, req.Method)
+				assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"))
+				res.Header().Set("Location", "/redirected")
+				res.WriteHeader(statusCode)
+			}))
+			defer testServer.Close()
+
+			redirectHandler := NewRedirectHandler()
+			compressionHandler := NewCompressionHandler()
+			client := GetDefaultClient(redirectHandler, compressionHandler)
+
+			obsOptions := &ObservabilityOptions{}
+			ctx := context.WithValue(context.Background(), observabilityOptionsKeyValue, obsOptions)
+			req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, testServer.URL, bytes.NewBuffer(postBody))
+			assert.NoError(t, err)
+
+			resp, err := client.Do(req)
+			assert.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+			assert.True(t, firstReqReceived, "first request should have been received")
+			assert.True(t, redirectReqReceived, "redirected request should have been received")
+		})
+	}
+}
+
+func TestCompressionHandler415FallbackUpdatesOriginalRequestConsistent(t *testing.T) {
+	postBody := []byte("payload to test 415 fallback consistency")
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(context.Background(), observabilityOptionsKeyValue, obsOptions)
+	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, "https://example.com/test", bytes.NewReader(postBody))
+	assert.NoError(t, err)
+
+	handler := NewCompressionHandler()
+	body415 := &trackingReadCloser{Reader: strings.NewReader("unsupported media type"), closed: false}
+	resp415 := &nethttp.Response{
+		StatusCode: 415,
+		Header:     nethttp.Header{},
+		Body:       body415,
+	}
+
+	body200 := &trackingReadCloser{Reader: strings.NewReader("success"), closed: false}
+	resp200 := &nethttp.Response{
+		StatusCode: 200,
+		Header:     nethttp.Header{},
+		Body:       body200,
+	}
+
+	callCount := 0
+	pipeline := &testFuncPipeline{
+		next: func(r *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+				return resp415, nil
+			}
+			assert.Empty(t, r.Header.Get("Content-Encoding"))
+			return resp200, nil
+		},
+	}
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	// Assert that req (origReq) was updated consistently by 415 fallback
+	assert.Empty(t, req.Header.Get("Content-Encoding"))
+	assert.Equal(t, int64(len(postBody)), req.ContentLength)
+	assert.NotNil(t, req.GetBody)
+	replayed, err := req.GetBody()
+	assert.NoError(t, err)
+	defer replayed.Close()
+	data, err := io.ReadAll(replayed)
+	assert.NoError(t, err)
+	assert.Equal(t, postBody, data)
 }

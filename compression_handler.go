@@ -75,6 +75,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	if req == nil {
 		return nil, http.ErrNotSupported
 	}
+	origReq := req
 	var reqOption compression
 	if req.Context() != nil {
 		reqOption, _ = req.Context().Value(compressKey).(compression)
@@ -121,12 +122,20 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		return nil, err
 	}
 
+	compressedGetBody := func() (io.ReadCloser, error) {
+		r, _, err := compressReqBody(unCompressedBody)
+		return r, err
+	}
+
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Body = compressedBody
 	req.ContentLength = int64(size)
-	req.GetBody = func() (io.ReadCloser, error) {
-		r, _, err := compressReqBody(unCompressedBody)
-		return r, err
+	req.GetBody = compressedGetBody
+
+	if origReq != nil && origReq != req {
+		origReq.Body = compressedBody
+		origReq.ContentLength = int64(size)
+		origReq.GetBody = compressedGetBody
 	}
 
 	if span != nil {
@@ -143,10 +152,17 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	if resp.StatusCode == 415 {
 		drainAndCloseResponseBody(resp)
 		req.Header.Del("Content-Encoding")
+		uncompressedGetBody := func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(unCompressedBody)), nil
+		}
 		req.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
 		req.ContentLength = unCompressedContentLength
-		req.GetBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(unCompressedBody)), nil
+		req.GetBody = uncompressedGetBody
+
+		if origReq != nil && origReq != req {
+			origReq.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
+			origReq.ContentLength = unCompressedContentLength
+			origReq.GetBody = uncompressedGetBody
 		}
 
 		if span != nil {
