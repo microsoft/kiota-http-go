@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -197,12 +198,23 @@ func TestCompressionHandlerUpdatesGetBodyAndCloses415ResponseBody(t *testing.T) 
 			if callCount == 1 {
 				assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
 				assert.NotNil(t, r.GetBody)
+				compressedBodyData, readBodyErr := io.ReadAll(r.Body)
+				assert.NoError(t, readBodyErr)
+				assert.NotEqual(t, postBody, compressedBodyData)
+
 				replayedCompressed, getErr := r.GetBody()
 				assert.NoError(t, getErr)
 				defer replayedCompressed.Close()
 				data, readErr := io.ReadAll(replayedCompressed)
 				assert.NoError(t, readErr)
-				assert.NotEmpty(t, data)
+				assert.Equal(t, compressedBodyData, data)
+
+				gzReader, gzErr := gzip.NewReader(bytes.NewReader(data))
+				assert.NoError(t, gzErr)
+				defer gzReader.Close()
+				decompressed, decompErr := io.ReadAll(gzReader)
+				assert.NoError(t, decompErr)
+				assert.Equal(t, postBody, decompressed)
 				return resp415, nil
 			}
 			assert.Empty(t, r.Header.Get("Content-Encoding"))
