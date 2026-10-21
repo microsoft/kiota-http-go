@@ -610,3 +610,110 @@ func TestItUsesRequestContextCustomScrubber(t *testing.T) {
 	assert.True(t, customScrubberCalled)
 	assert.Empty(t, result.Header.Get("Custom-Secret"))
 }
+
+func TestRedirectHandlerUsesHandlerScrubberWhenRequestOptionHasNoScrubber(t *testing.T) {
+	customScrubberCalled := false
+	handlerOptions := RedirectHandlerOptions{
+		ScrubSensitiveHeaders: func(request *nethttp.Request, originalURL *url.URL) {
+			customScrubberCalled = true
+			request.Header.Del("Custom-Secret")
+		},
+	}
+	handler := NewRedirectHandlerWithOptions(handlerOptions)
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/source", nil)
+	assert.NoError(t, err)
+	req.Header.Set("Custom-Secret", "secret-value")
+
+	reqOptions := &RedirectHandlerOptions{
+		MaxRedirects: 3,
+	}
+	ctx := context.WithValue(req.Context(), redirectKeyValue, reqOptions)
+	req = req.WithContext(ctx)
+
+	resp := &nethttp.Response{
+		StatusCode: found,
+		Header:     nethttp.Header{"Location": []string{"https://example.com/target"}},
+	}
+	result, err := handler.getRedirectRequest(req, resp)
+	assert.NoError(t, err)
+	assert.True(t, customScrubberCalled, "handler custom scrubber should be invoked when request options does not specify a scrubber")
+	assert.Empty(t, result.Header.Get("Custom-Secret"))
+}
+
+type trackingReadCloserWithReadCount struct {
+	io.Reader
+	readCount int
+	closed    bool
+}
+
+func (t *trackingReadCloserWithReadCount) Read(p []byte) (n int, err error) {
+	t.readCount++
+	return t.Reader.Read(p)
+}
+
+func (t *trackingReadCloserWithReadCount) Close() error {
+	t.closed = true
+	return nil
+}
+
+func TestRedirectClosesUnknownLengthAndLargeResponseBodyWithoutReading(t *testing.T) {
+	handler := NewRedirectHandler()
+
+	// Case 1: Unknown length (ContentLength = -1)
+	req1, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/start", nil)
+	assert.NoError(t, err)
+	bodyUnknown := &trackingReadCloserWithReadCount{Reader: strings.NewReader("streaming body"), closed: false}
+	respUnknown := &nethttp.Response{
+		StatusCode:    found,
+		Header:        nethttp.Header{"Location": []string{"https://example.com/end"}},
+		Body:          bodyUnknown,
+		ContentLength: -1,
+	}
+	respFinal := &nethttp.Response{
+		StatusCode: 200,
+		Header:     nethttp.Header{},
+		Body:       &trackingReadCloser{Reader: strings.NewReader("final"), closed: false},
+	}
+
+	callCount := 0
+	pipeline1 := &testFuncPipeline{
+		next: func(req *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return respUnknown, nil
+			}
+			return respFinal, nil
+		},
+	}
+	_, err = handler.Intercept(pipeline1, 0, req1)
+	assert.NoError(t, err)
+	assert.True(t, bodyUnknown.closed, "unknown length response body must be closed")
+	assert.Equal(t, 0, bodyUnknown.readCount, "unknown length response body must not be read to prevent hangs")
+
+	// Case 2: Large body exceeding maxDrainBytes
+	req2, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/start", nil)
+	assert.NoError(t, err)
+	bodyLarge := &trackingReadCloserWithReadCount{Reader: strings.NewReader("large body exceeding limit"), closed: false}
+	respLarge := &nethttp.Response{
+		StatusCode:    found,
+		Header:        nethttp.Header{"Location": []string{"https://example.com/end"}},
+		Body:          bodyLarge,
+		ContentLength: 10 * 1024 * 1024,
+	}
+
+	callCount = 0
+	pipeline2 := &testFuncPipeline{
+		next: func(req *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return respLarge, nil
+			}
+			return respFinal, nil
+		},
+	}
+	_, err = handler.Intercept(pipeline2, 0, req2)
+	assert.NoError(t, err)
+	assert.True(t, bodyLarge.closed, "large response body must be closed")
+	assert.Equal(t, 0, bodyLarge.readCount, "large response body must not be read")
+}

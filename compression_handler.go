@@ -141,10 +141,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 
 	// If response has status 415 retry request with uncompressed body
 	if resp.StatusCode == 415 {
-		if resp.Body != nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
-		}
+		drainAndCloseResponseBody(resp)
 		req.Header.Del("Content-Encoding")
 		req.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
 		req.ContentLength = unCompressedContentLength

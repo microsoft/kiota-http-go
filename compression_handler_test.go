@@ -231,3 +231,71 @@ func TestCompressionHandlerHandlesNilRequest(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, resp)
 }
+
+func TestCompressionHandlerClosesUnknownLengthAndLarge415ResponseBodyWithoutReading(t *testing.T) {
+	postBody := []byte("payload to compress and test")
+	handler := NewCompressionHandler()
+
+	// Case 1: Unknown length 415 response body (ContentLength = -1)
+	bodyUnknown := &trackingReadCloserWithReadCount{Reader: strings.NewReader("streaming 415"), closed: false}
+	resp415Unknown := &nethttp.Response{
+		StatusCode:    415,
+		Header:        nethttp.Header{},
+		Body:          bodyUnknown,
+		ContentLength: -1,
+	}
+	resp200 := &nethttp.Response{
+		StatusCode: 200,
+		Header:     nethttp.Header{},
+		Body:       &trackingReadCloser{Reader: strings.NewReader("success"), closed: false},
+	}
+
+	req1, err := nethttp.NewRequest("POST", "https://example.com/test", bytes.NewReader(postBody))
+	assert.NoError(t, err)
+
+	callCount := 0
+	pipeline1 := &testFuncPipeline{
+		next: func(r *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return resp415Unknown, nil
+			}
+			return resp200, nil
+		},
+	}
+
+	resp, err := handler.Intercept(pipeline1, 0, req1)
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.True(t, bodyUnknown.closed, "415 unknown-length body must be closed")
+	assert.Equal(t, 0, bodyUnknown.readCount, "415 unknown-length body must not be read to prevent hangs")
+
+	// Case 2: Large 415 response body exceeding maxDrainBytes
+	bodyLarge := &trackingReadCloserWithReadCount{Reader: strings.NewReader("large 415 body"), closed: false}
+	resp415Large := &nethttp.Response{
+		StatusCode:    415,
+		Header:        nethttp.Header{},
+		Body:          bodyLarge,
+		ContentLength: 10 * 1024 * 1024,
+	}
+
+	req2, err := nethttp.NewRequest("POST", "https://example.com/test", bytes.NewReader(postBody))
+	assert.NoError(t, err)
+
+	callCount = 0
+	pipeline2 := &testFuncPipeline{
+		next: func(r *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return resp415Large, nil
+			}
+			return resp200, nil
+		},
+	}
+
+	resp, err = handler.Intercept(pipeline2, 0, req2)
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.True(t, bodyLarge.closed, "415 large body must be closed")
+	assert.Equal(t, 0, bodyLarge.readCount, "415 large body must not be read to prevent hangs")
+}
