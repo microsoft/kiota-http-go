@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"errors"
 	nethttp "net/http"
 	"strconv"
 	"strings"
@@ -63,8 +64,14 @@ func (options *ParametersNameDecodingOptions) GetParametersToDecode() []byte {
 
 // Intercept implements the RequestInterceptor interface and decodes the parameters name
 func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
+	if req.URL == nil {
+		return pipeline.Next(req, middlewareIndex)
+	}
 	reqOption, ok := req.Context().Value(parametersNameDecodingKeyValue).(parametersNameDecodingOptionsInt)
-	if !ok {
+	if !ok || reqOption == nil {
 		reqOption = &handler.options
 	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)
@@ -78,9 +85,30 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 	if reqOption.GetEnable() &&
 		len(reqOption.GetParametersToDecode()) != 0 &&
 		strings.Contains(req.URL.RawQuery, "%") {
-		req.URL.RawQuery = decodeUriEncodedString(req.URL.RawQuery, reqOption.GetParametersToDecode())
+		req.URL.RawQuery = decodeQueryParameters(req.URL.RawQuery, reqOption.GetParametersToDecode())
 	}
 	return pipeline.Next(req, middlewareIndex)
+}
+
+func decodeQueryParameters(originalRawQuery string, parametersToDecode []byte) string {
+	if originalRawQuery == "" || len(parametersToDecode) == 0 || !strings.Contains(originalRawQuery, "%") {
+		return originalRawQuery
+	}
+	parts := strings.Split(originalRawQuery, "&")
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		eqIdx := strings.Index(part, "=")
+		if eqIdx == -1 {
+			parts[i] = decodeUriEncodedString(part, parametersToDecode)
+		} else {
+			name := part[:eqIdx]
+			value := part[eqIdx+1:]
+			parts[i] = decodeUriEncodedString(name, parametersToDecode) + "=" + value
+		}
+	}
+	return strings.Join(parts, "&")
 }
 
 func decodeUriEncodedString(originalValue string, parametersToDecode []byte) string {

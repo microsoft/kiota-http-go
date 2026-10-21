@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"errors"
 	nethttp "net/http"
 
 	abstractions "github.com/microsoft/kiota-abstractions-go"
@@ -79,6 +80,9 @@ func NewHeadersInspectionHandlerWithOptions(options HeadersInspectionOptions) *H
 
 // Intercept implements the interface and evaluates whether to retry a failed request.
 func (middleware HeadersInspectionHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)
 	ctx := req.Context()
 	var span trace.Span
@@ -91,12 +95,14 @@ func (middleware HeadersInspectionHandler) Intercept(pipeline Pipeline, middlewa
 		req = req.WithContext(ctx)
 	}
 	reqOption, ok := req.Context().Value(headersInspectionKeyValue).(headersInspectionOptionsInt)
-	if !ok {
+	if !ok || reqOption == nil {
 		reqOption = &middleware.options
 	}
-	if reqOption.GetInspectRequestHeaders() {
+	if reqOption.GetInspectRequestHeaders() && reqOption.GetRequestHeaders() != nil {
 		for k, v := range req.Header {
-			if len(v) == 1 {
+			if len(v) == 0 {
+				continue
+			} else if len(v) == 1 {
 				reqOption.GetRequestHeaders().Add(k, v[0])
 			} else {
 				reqOption.GetRequestHeaders().Add(k, v[0], v[1:]...)
@@ -107,9 +113,11 @@ func (middleware HeadersInspectionHandler) Intercept(pipeline Pipeline, middlewa
 	if err != nil {
 		return response, err
 	}
-	if reqOption.GetInspectResponseHeaders() {
+	if response != nil && reqOption.GetInspectResponseHeaders() && reqOption.GetResponseHeaders() != nil {
 		for k, v := range response.Header {
-			if len(v) == 1 {
+			if len(v) == 0 {
+				continue
+			} else if len(v) == 1 {
 				reqOption.GetResponseHeaders().Add(k, v[0])
 			} else {
 				reqOption.GetResponseHeaders().Add(k, v[0], v[1:]...)
