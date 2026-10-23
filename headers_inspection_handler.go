@@ -78,7 +78,7 @@ func NewHeadersInspectionHandlerWithOptions(options HeadersInspectionOptions) *H
 	return &HeadersInspectionHandler{options: options}
 }
 
-// Intercept implements the interface and evaluates whether to retry a failed request.
+// Intercept implements the interface and inspects headers on the request and response.
 func (middleware HeadersInspectionHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
 	if req == nil {
 		return nil, errors.New("req cannot be nil")
@@ -99,6 +99,7 @@ func (middleware HeadersInspectionHandler) Intercept(pipeline Pipeline, middlewa
 		reqOption = &middleware.options
 	}
 	if reqOption.GetInspectRequestHeaders() && reqOption.GetRequestHeaders() != nil {
+		reqOption.GetRequestHeaders().Clear()
 		for k, v := range req.Header {
 			if len(v) == 0 {
 				continue
@@ -109,8 +110,14 @@ func (middleware HeadersInspectionHandler) Intercept(pipeline Pipeline, middlewa
 			}
 		}
 	}
+	if reqOption.GetInspectResponseHeaders() && reqOption.GetResponseHeaders() != nil {
+		reqOption.GetResponseHeaders().Clear()
+	}
 	response, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return response, err
 	}
 	if response != nil && reqOption.GetInspectResponseHeaders() && reqOption.GetResponseHeaders() != nil {
