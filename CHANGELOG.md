@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.10](https://github.com/microsoft/kiota-http-go/compare/v1.5.9...v1.5.10) (2026-10-23)
+
+
+### Bug Fixes
+
+* **http:** decode only query parameter names and prevent empty header index panic ([21c5b7c](https://github.com/microsoft/kiota-http-go/commit/21c5b7c1f683cc938339abc886a037c1ccaa3fc7))
+* **http:** decode only query parameter names and prevent empty header index panic ([81d307c](https://github.com/microsoft/kiota-http-go/commit/81d307cf6e729cf7d4149bca0c79abbd495fd0a6))
+* **http:** isolate request and response headers per request in HeadersInspectionHandler ([565e782](https://github.com/microsoft/kiota-http-go/commit/565e78215f3c415d761e39bf9c5e4614014d3105))
+* **http:** isolate request and response headers per request in HeadersInspectionHandler ([a942b8e](https://github.com/microsoft/kiota-http-go/commit/a942b8e02f132e71dd21d50242be5005cc0ba4f2))
+* **redirect:** resolve relative redirect URLs via ResolveReference ([4a8e3f5](https://github.com/microsoft/kiota-http-go/commit/4a8e3f5a370a5d48d94a4469852e82f2426291fe))
+* **redirect:** use ResolveReference for RFC-compliant relative redirect resolution ([0ef6db4](https://github.com/microsoft/kiota-http-go/commit/0ef6db4b97a05326371b00cb1d379ec27a737ebb))
+
 ## [1.5.9](https://github.com/microsoft/kiota-http-go/compare/v1.5.8...v1.5.9) (2026-10-19)
 
 
