@@ -72,9 +72,20 @@ func (o CompressionOptions) ShouldCompress() bool {
 // Intercept is invoked by the middleware pipeline to either move the request/response
 // to the next middleware in the pipeline
 func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *http.Request) (*http.Response, error) {
-	reqOption, ok := req.Context().Value(compressKey).(compression)
-	if !ok {
-		reqOption = c.options
+	if req == nil {
+		return nil, http.ErrNotSupported
+	}
+	origReq := req
+	var reqOption compression
+	if req.Context() != nil {
+		reqOption, _ = req.Context().Value(compressKey).(compression)
+	}
+	if reqOption == nil {
+		if c != nil {
+			reqOption = c.options
+		} else {
+			reqOption = CompressionOptions{}
+		}
 	}
 
 	obsOptions := GetObservabilityOptionsFromRequest(req)
@@ -111,9 +122,21 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		return nil, err
 	}
 
+	compressedGetBody := func() (io.ReadCloser, error) {
+		r, _, err := compressReqBody(unCompressedBody)
+		return r, err
+	}
+
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Body = compressedBody
 	req.ContentLength = int64(size)
+	req.GetBody = compressedGetBody
+
+	if origReq != nil && origReq != req {
+		origReq.Body = compressedBody
+		origReq.ContentLength = int64(size)
+		origReq.GetBody = compressedGetBody
+	}
 
 	if span != nil {
 		span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)))
@@ -127,9 +150,20 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 
 	// If response has status 415 retry request with uncompressed body
 	if resp.StatusCode == 415 {
-		delete(req.Header, "Content-Encoding")
+		drainAndCloseResponseBody(resp)
+		req.Header.Del("Content-Encoding")
+		uncompressedGetBody := func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(unCompressedBody)), nil
+		}
 		req.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
 		req.ContentLength = unCompressedContentLength
+		req.GetBody = uncompressedGetBody
+
+		if origReq != nil && origReq != req {
+			origReq.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
+			origReq.ContentLength = unCompressedContentLength
+			origReq.GetBody = uncompressedGetBody
+		}
 
 		if span != nil {
 			span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)),

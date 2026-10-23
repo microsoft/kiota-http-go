@@ -171,6 +171,7 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 			}
 			return response, err
 		}
+		drainAndCloseResponseBody(response)
 		if observabilityName != "" {
 			ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
 			span.SetAttributes(attribute.Int("com.microsoft.kiota.handler.redirect.count", redirectCount),
@@ -242,7 +243,21 @@ func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, r
 	}
 
 	// Scrub sensitive headers before following the redirect
-	scrubber := middleware.options.GetScrubSensitiveHeaders()
+	var scrubber ScrubSensitiveHeaders
+	if request != nil && request.Context() != nil {
+		if reqOption, ok := request.Context().Value(redirectKeyValue).(redirectHandlerOptionsInt); ok && reqOption != nil {
+			if concreteOptions, ok := reqOption.(*RedirectHandlerOptions); ok {
+				if concreteOptions != nil && concreteOptions.ScrubSensitiveHeaders != nil {
+					scrubber = concreteOptions.ScrubSensitiveHeaders
+				}
+			} else {
+				scrubber = reqOption.GetScrubSensitiveHeaders()
+			}
+		}
+	}
+	if scrubber == nil {
+		scrubber = middleware.options.GetScrubSensitiveHeaders()
+	}
 	if scrubber != nil {
 		scrubber(result, request.URL)
 	}
