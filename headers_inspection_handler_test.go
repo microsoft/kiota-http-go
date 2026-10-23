@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"errors"
 	nethttp "net/http"
 	"net/http/httptest"
 	"testing"
@@ -150,4 +151,61 @@ func TestHeadersInspectionNilHeadersOptionsDoesNotPanic(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 	})
+}
+
+func TestHeadersInspectionIsolatesHeadersBetweenRequests(t *testing.T) {
+	options := NewHeadersInspectionOptions()
+	options.InspectRequestHeaders = true
+	options.InspectResponseHeaders = true
+	handler := NewHeadersInspectionHandlerWithOptions(*options)
+
+	// First request
+	req1, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/1", nil)
+	assert.NoError(t, err)
+	req1.Header.Add("x-req-one", "val1")
+
+	resp1 := &nethttp.Response{
+		StatusCode: 200,
+		Header: nethttp.Header{
+			"x-res-one": []string{"resval1"},
+		},
+	}
+	pipeline1 := &stubPipeline{response: resp1}
+
+	_, err = handler.Intercept(pipeline1, 0, req1)
+	assert.NoError(t, err)
+	assert.True(t, options.GetRequestHeaders().ContainsKey("x-req-one"))
+	assert.True(t, options.GetResponseHeaders().ContainsKey("x-res-one"))
+
+	// Second request: previous headers should be cleared, isolating requests
+	req2, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/2", nil)
+	assert.NoError(t, err)
+	req2.Header.Add("x-req-two", "val2")
+
+	resp2 := &nethttp.Response{
+		StatusCode: 200,
+		Header: nethttp.Header{
+			"x-res-two": []string{"resval2"},
+		},
+	}
+	pipeline2 := &stubPipeline{response: resp2}
+
+	_, err = handler.Intercept(pipeline2, 0, req2)
+	assert.NoError(t, err)
+	assert.True(t, options.GetRequestHeaders().ContainsKey("x-req-two"))
+	assert.False(t, options.GetRequestHeaders().ContainsKey("x-req-one"))
+	assert.True(t, options.GetResponseHeaders().ContainsKey("x-res-two"))
+	assert.False(t, options.GetResponseHeaders().ContainsKey("x-res-one"))
+}
+
+func TestHeadersInspectionPipelineErrorRecordsError(t *testing.T) {
+	handler := NewHeadersInspectionHandler()
+	pipeline := &stubPipeline{err: errors.New("network failure")}
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.Error(t, err)
+	assert.Nil(t, resp)
 }
