@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"errors"
 	"fmt"
 	nethttp "net/http"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	abs "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // UserAgentHandler adds the product to the user agent header.
@@ -83,11 +85,15 @@ func (options *UserAgentHandlerOptions) GetProductVersion() string {
 const userAgentHeaderKey = "User-Agent"
 
 func (middleware UserAgentHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
+	var span trace.Span
 	obsOptions := GetObservabilityOptionsFromRequest(req)
 	if obsOptions != nil {
 		observabilityName := obsOptions.GetTracerInstrumentationName()
 		ctx := req.Context()
-		ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "UserAgentHandler_Intercept")
+		ctx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "UserAgentHandler_Intercept")
 		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.useragent.enable", true))
 		defer span.End()
 		req = req.WithContext(ctx)
@@ -97,6 +103,9 @@ func (middleware UserAgentHandler) Intercept(pipeline Pipeline, middlewareIndex 
 		options = &middleware.options
 	}
 	if options.GetEnabled() {
+		if req.Header == nil {
+			req.Header = make(nethttp.Header)
+		}
 		additionalValue := fmt.Sprintf("%s/%s", options.GetProductName(), options.GetProductVersion())
 		currentValue := req.Header.Get(userAgentHeaderKey)
 		if currentValue == "" {
@@ -105,5 +114,9 @@ func (middleware UserAgentHandler) Intercept(pipeline Pipeline, middlewareIndex 
 			req.Header.Set(userAgentHeaderKey, fmt.Sprintf("%s %s", currentValue, additionalValue))
 		}
 	}
-	return pipeline.Next(req, middlewareIndex)
+	response, err := pipeline.Next(req, middlewareIndex)
+	if err != nil && span != nil {
+		span.RecordError(err)
+	}
+	return response, err
 }

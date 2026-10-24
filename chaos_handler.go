@@ -279,6 +279,9 @@ func createChaosResponse(handler chaosHandlerOptionsInt, req *nethttp.Request) (
 const ChaosHandlerTriggeredEventKey = "com.microsoft.kiota.chaos_handler_triggered"
 
 func (middleware ChaosHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
 	reqOption, ok := req.Context().Value(chaosHandlerKey).(chaosHandlerOptionsInt)
 	if !ok {
 		reqOption = middleware.options

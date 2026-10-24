@@ -241,3 +241,13 @@ func TestItDoesntRetryOnSuccess(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, 0, retryAttemptInt)
 }
+
+
+func TestRetryHandlerNilRequest(t *testing.T) {
+	handler := NewRetryHandler()
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(newNoopPipeline(), 0, nil)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}
