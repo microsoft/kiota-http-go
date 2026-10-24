@@ -62,3 +62,23 @@ func TestNewUrlReplaceHandlerWithOptions(t *testing.T) {
 	assert.Equal(t, handler.options.GetReplacementPairs(), map[string]string{"foo": "bar"})
 }
 
+
+
+func TestUrlReplaceHandlerNilRequest(t *testing.T) {
+	handler := NewUrlReplaceHandler(true, map[string]string{"foo": "bar"})
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(newNoopPipeline(), 0, nil)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}
+
+func TestUrlReplaceHandlerNilURL(t *testing.T) {
+	handler := NewUrlReplaceHandler(true, map[string]string{"foo": "bar"})
+	req := &nethttp.Request{}
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}

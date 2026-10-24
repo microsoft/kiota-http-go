@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -102,6 +103,9 @@ const gatewayTimeout = 504
 
 // Intercept implements the interface and evaluates whether to retry a failed request.
 func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)
 	ctx := req.Context()
 	var span trace.Span
@@ -115,6 +119,9 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 	}
 	response, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return response, err
 	}
 	reqOption, ok := req.Context().Value(retryKeyValue).(retryHandlerOptionsInt)
@@ -125,6 +132,9 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 }
 
 func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeline, middlewareIndex int, options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response, executionCount int, cumulativeDelay time.Duration, observabilityName string) (*nethttp.Response, error) {
+	if resp == nil {
+		return nil, nil
+	}
 	if middleware.isRetriableErrorCode(resp.StatusCode) &&
 		middleware.isRetriableRequest(req) &&
 		executionCount < options.GetMaxRetries() &&

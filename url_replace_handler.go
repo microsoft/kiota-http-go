@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"errors"
 	abstractions "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -64,6 +65,13 @@ type urlReplaceOptionsInt interface {
 // Intercept is invoked by the middleware pipeline to either move the request/response
 // to the next middleware in the pipeline
 func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *http.Request) (*http.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
+	if req.URL == nil {
+		return nil, errors.New("req.URL cannot be nil")
+	}
+
 	reqOption, ok := req.Context().Value(urlReplaceOptionKey).(urlReplaceOptionsInt)
 	if !ok {
 		reqOption = &c.options
@@ -80,7 +88,11 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 	}
 
 	if !reqOption.IsEnabled() || len(reqOption.GetReplacementPairs()) == 0 {
-		return pipeline.Next(req, middlewareIndex)
+		response, err := pipeline.Next(req, middlewareIndex)
+		if err != nil && span != nil {
+			span.RecordError(err)
+		}
+		return response, err
 	}
 
 	req.URL.Path = ReplacePathTokens(req.URL.Path, reqOption.GetReplacementPairs())
@@ -89,7 +101,11 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 		span.SetAttributes(attribute.String("http.request_url", req.RequestURI))
 	}
 
-	return pipeline.Next(req, middlewareIndex)
+	response, err := pipeline.Next(req, middlewareIndex)
+	if err != nil && span != nil {
+		span.RecordError(err)
+	}
+	return response, err
 }
 
 // ReplacePathTokens invokes token replacement logic on the given url path

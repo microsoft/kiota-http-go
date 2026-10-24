@@ -56,3 +56,13 @@ func TestItCreatesANewChaosHandlerWithOptions(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, 400, resp.StatusCode)
 }
+
+
+func TestChaosHandlerNilRequest(t *testing.T) {
+	handler := NewChaosHandler()
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(newNoopPipeline(), 0, nil)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}
