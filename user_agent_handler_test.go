@@ -73,11 +73,16 @@ func TestItDoesNotAddTheUserAgentHeaderWhenDisabled(t *testing.T) {
 	assert.Equal(t, false, strings.Contains(req.Header.Get("User-Agent"), "kiota-go"))
 }
 
-
 func TestUserAgentHandlerNilRequest(t *testing.T) {
 	handler := NewUserAgentHandler()
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
 	assert.NotPanics(t, func() {
-		resp, err := handler.Intercept(newNoopPipeline(), 0, nil)
+		resp, err := handler.Intercept(pipeline, 0, nil)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 	})
@@ -88,8 +93,14 @@ func TestUserAgentHandlerNilHeader(t *testing.T) {
 	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
 	assert.NoError(t, err)
 	req.Header = nil
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
 	assert.NotPanics(t, func() {
-		resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+		resp, err := handler.Intercept(pipeline, 0, req)
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 	})
