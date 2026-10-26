@@ -2,6 +2,8 @@ package nethttplibrary
 
 import (
 	"context"
+	"errors"
+	"go.opentelemetry.io/otel"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"strconv"
@@ -240,4 +242,103 @@ func TestItDoesntRetryOnSuccess(t *testing.T) {
 	}
 	assert.NotNil(t, resp)
 	assert.Equal(t, 0, retryAttemptInt)
+}
+
+func TestRetryHandlerNilRequest(t *testing.T) {
+	handler := NewRetryHandler()
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, nil)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}
+
+func TestRetryHandlerNilResponse(t *testing.T) {
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+	pipeline := &stubPipeline{
+		response: nil,
+		err:      nil,
+	}
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Equal(t, "response cannot be nil", err.Error())
+	})
+}
+
+type sequencePipeline struct {
+	responses []*nethttp.Response
+	errors    []error
+	callCount int
+}
+
+func (s *sequencePipeline) Next(req *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+	idx := s.callCount
+	s.callCount++
+	if idx < len(s.responses) && idx < len(s.errors) {
+		return s.responses[idx], s.errors[idx]
+	}
+	return nil, errors.New("unexpected call")
+}
+
+func TestRetryHandlerTerminalRetryErrorRecordedOnSpan(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
+
+	handler := NewRetryHandlerWithOptions(RetryHandlerOptions{
+		ShouldRetry: func(delay time.Duration, executionCount int, request *nethttp.Request, response *nethttp.Response) bool {
+			return true
+		},
+		MaxRetries:   1,
+		DelaySeconds: 0,
+	})
+
+	expectedErr := errors.New("downstream network reset")
+	pipeline := &sequencePipeline{
+		responses: []*nethttp.Response{
+			{StatusCode: 429, Header: nethttp.Header{}},
+			nil,
+		},
+		errors: []error{
+			nil,
+			expectedErr,
+		},
+	}
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), observabilityOptionsKeyValue, obsOptions)
+	req = req.WithContext(ctx)
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.ErrorIs(t, err, expectedErr)
+	assert.Nil(t, resp)
+
+	tracer, ok := tracerProvider.tracers[obsOptions.GetTracerInstrumentationName()]
+	require.True(t, ok, "tracer should be created")
+	require.NotEmpty(t, tracer.spans, "spans should be recorded")
+
+	var interceptSpan *recordingSpan
+	for _, s := range tracer.spans {
+		if s.name == "RetryHandler_Intercept" {
+			interceptSpan = s
+			break
+		}
+	}
+	require.NotNil(t, interceptSpan, "RetryHandler_Intercept span should be recorded")
+	assert.True(t, interceptSpan.ended, "span should be ended")
+	assert.Contains(t, interceptSpan.recordedErrors, expectedErr, "recorded errors should contain terminal retry error")
 }
