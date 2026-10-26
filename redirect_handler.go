@@ -147,6 +147,18 @@ func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex i
 		defer span.End()
 		req = req.WithContext(ctx)
 	}
+
+	tracker, ok := req.Context().Value(requestBodyTrackerKey{}).(*requestBodyTracker)
+	if !ok || tracker == nil {
+		tracker = &requestBodyTracker{
+			body:          req.Body,
+			contentLength: req.ContentLength,
+			getBody:       req.GetBody,
+		}
+		ctx = context.WithValue(req.Context(), requestBodyTrackerKey{}, tracker)
+		req = req.WithContext(ctx)
+	}
+
 	response, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
 		return response, err
@@ -220,26 +232,42 @@ func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, r
 		}
 		targetUrl = request.URL.ResolveReference(targetUrl)
 	}
-	result := request.Clone(request.Context())
+	effectiveReq := request
+	if response != nil && response.Request != nil && response.Request.GetBody != nil {
+		effectiveReq = response.Request
+	} else if tracker, ok := request.Context().Value(requestBodyTrackerKey{}).(*requestBodyTracker); ok && tracker != nil && tracker.modified && tracker.getBody != nil {
+		effectiveReq = request.Clone(request.Context())
+		effectiveReq.Body = tracker.body
+		effectiveReq.ContentLength = tracker.contentLength
+		effectiveReq.GetBody = tracker.getBody
+	}
+
+	result := effectiveReq.Clone(effectiveReq.Context())
 	result.URL = targetUrl
 	if result.Host != targetUrl.Host {
 		result.Host = targetUrl.Host
 	}
 
-	redirectMethod, includeBody := getRedirectMethodAndBody(request.Method, response.StatusCode)
+	redirectMethod, includeBody := getRedirectMethodAndBody(effectiveReq.Method, response.StatusCode)
 	result.Method = redirectMethod
 	if includeBody {
-		if request.Body != nil && request.Body != nethttp.NoBody {
-			if request.GetBody == nil {
+		if effectiveReq.Body != nil && effectiveReq.Body != nethttp.NoBody {
+			if effectiveReq.GetBody == nil {
 				return nil, errRedirectBodyNotReplayable
 			}
-			result.Body, err = request.GetBody()
+			result.Body, err = effectiveReq.GetBody()
 			if err != nil {
 				return nil, err
 			}
 		}
-	} else if request.Body != nil && request.Body != nethttp.NoBody || redirectMethod != request.Method {
+	} else if effectiveReq.Body != nil && effectiveReq.Body != nethttp.NoBody || redirectMethod != effectiveReq.Method {
 		dropRedirectRequestBody(result)
+		if tracker, ok := result.Context().Value(requestBodyTrackerKey{}).(*requestBodyTracker); ok && tracker != nil {
+			tracker.body = nil
+			tracker.contentLength = 0
+			tracker.getBody = nil
+			tracker.modified = false
+		}
 	}
 
 	// Scrub sensitive headers before following the redirect

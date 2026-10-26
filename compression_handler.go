@@ -138,6 +138,13 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		origReq.GetBody = compressedGetBody
 	}
 
+	if tracker, ok := req.Context().Value(requestBodyTrackerKey{}).(*requestBodyTracker); ok && tracker != nil {
+		tracker.body = compressedBody
+		tracker.contentLength = int64(size)
+		tracker.getBody = compressedGetBody
+		tracker.modified = true
+	}
+
 	if span != nil {
 		span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)))
 	}
@@ -163,6 +170,13 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 			origReq.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
 			origReq.ContentLength = unCompressedContentLength
 			origReq.GetBody = uncompressedGetBody
+		}
+
+		if tracker, ok := req.Context().Value(requestBodyTrackerKey{}).(*requestBodyTracker); ok && tracker != nil {
+			tracker.body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
+			tracker.contentLength = unCompressedContentLength
+			tracker.getBody = uncompressedGetBody
+			tracker.modified = true
 		}
 
 		if span != nil {

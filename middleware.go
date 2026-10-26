@@ -25,3 +25,12 @@ func drainAndCloseResponseBody(resp *nethttp.Response) {
 	}
 	_ = resp.Body.Close()
 }
+
+type requestBodyTrackerKey struct{}
+
+type requestBodyTracker struct {
+	body          io.ReadCloser
+	contentLength int64
+	getBody       func() (io.ReadCloser, error)
+	modified      bool
+}

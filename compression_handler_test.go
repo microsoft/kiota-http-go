@@ -314,7 +314,6 @@ func TestCompressionHandlerClosesUnknownLengthAndLarge415ResponseBodyWithoutRead
 	assert.Equal(t, 0, bodyLarge.readCount, "415 large body must not be read to prevent hangs")
 }
 
-
 func TestRedirectWithCompressionAndObservability(t *testing.T) {
 	for _, statusCode := range []int{307, 308} {
 		t.Run(strconv.Itoa(statusCode), func(t *testing.T) {
@@ -354,8 +353,10 @@ func TestRedirectWithCompressionAndObservability(t *testing.T) {
 			defer testServer.Close()
 
 			redirectHandler := NewRedirectHandler()
+			retryHandler := NewRetryHandler()
+			headersInspectionHandler := NewHeadersInspectionHandler()
 			compressionHandler := NewCompressionHandler()
-			client := GetDefaultClient(redirectHandler, compressionHandler)
+			client := GetDefaultClient(redirectHandler, retryHandler, headersInspectionHandler, compressionHandler)
 
 			obsOptions := &ObservabilityOptions{}
 			ctx := context.WithValue(context.Background(), observabilityOptionsKeyValue, obsOptions)
