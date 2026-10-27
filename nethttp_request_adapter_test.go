@@ -424,3 +424,29 @@ func TestNetHttpRequestAdapterNilReceiverSafety(t *testing.T) {
 	nilAdapter.EnableBackingStore(nil)
 }
 
+func TestNetHttpRequestAdapterCustomFactoriesAndBackingStore(t *testing.T) {
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	customClient := &nethttp.Client{}
+	customParseNodeFactory := serialization.DefaultParseNodeFactoryInstance
+	customWriterFactory := serialization.DefaultSerializationWriterFactoryInstance
+
+	adapter, err := NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClient(
+		authProvider,
+		customParseNodeFactory,
+		customWriterFactory,
+		customClient,
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, adapter)
+
+	assert.Equal(t, customClient, adapter.GetHttpClient())
+	assert.Equal(t, customParseNodeFactory, adapter.GetParseNodeFactory())
+	assert.Equal(t, customWriterFactory, adapter.GetSerializationWriterFactory())
+
+	// Enable backing store and verify GetParseNodeFactory returns wrapped factory
+	adapter.EnableBackingStore(nil)
+	assert.NotNil(t, adapter.GetParseNodeFactory())
+	assert.NotNil(t, adapter.GetSerializationWriterFactory())
+}
+
+
