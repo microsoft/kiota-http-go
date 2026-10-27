@@ -103,12 +103,18 @@ func (a *NetHttpRequestAdapter) GetSerializationWriterFactory() absser.Serializa
 
 // GetParseNodeFactory returns the parse node factory currently in use for the request adapter service.
 func (a *NetHttpRequestAdapter) GetParseNodeFactory() absser.ParseNodeFactory {
-	return nil
+	if a == nil {
+		return nil
+	}
+	return a.parseNodeFactory
 }
 
 // GetHttpClient returns the *nethttp.Client used by the request adapter service.
 func (a *NetHttpRequestAdapter) GetHttpClient() *nethttp.Client {
-	return nil
+	if a == nil {
+		return nil
+	}
+	return a.httpClient
 }
 
 // EnableBackingStore enables the backing store proxies for the SerializationWriters and ParseNodes in use.
