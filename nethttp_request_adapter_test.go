@@ -393,3 +393,34 @@ func TestNetHttpRequestAdapter_EnableBackingStore(t *testing.T) {
 	adapter.EnableBackingStore(store)
 	assert.Equal(t, absstore.BackingStoreFactoryInstance(), store())
 }
+
+func TestNetHttpRequestAdapterAccessors(t *testing.T) {
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.NoError(t, err)
+	assert.NotNil(t, adapter)
+
+	// Verify getters return expected instances
+	assert.NotNil(t, adapter.GetHttpClient())
+	assert.NotNil(t, adapter.GetParseNodeFactory())
+	assert.NotNil(t, adapter.GetSerializationWriterFactory())
+	assert.Equal(t, "", adapter.GetBaseUrl())
+
+	adapter.SetBaseUrl("https://graph.microsoft.com/v1.0")
+	assert.Equal(t, "https://graph.microsoft.com/v1.0", adapter.GetBaseUrl())
+}
+
+func TestNetHttpRequestAdapterNilReceiverSafety(t *testing.T) {
+	var nilAdapter *NetHttpRequestAdapter
+
+	// Accessors on nil adapter must be safe and not panic
+	assert.Nil(t, nilAdapter.GetHttpClient())
+	assert.Nil(t, nilAdapter.GetParseNodeFactory())
+	assert.Nil(t, nilAdapter.GetSerializationWriterFactory())
+	assert.Equal(t, "", nilAdapter.GetBaseUrl())
+
+	// Mutators on nil adapter should be safe no-ops
+	nilAdapter.SetBaseUrl("https://example.com")
+	nilAdapter.EnableBackingStore(nil)
+}
+
