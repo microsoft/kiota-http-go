@@ -98,11 +98,25 @@ func NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAn
 
 // GetSerializationWriterFactory returns the serialization writer factory currently in use for the request adapter service.
 func (a *NetHttpRequestAdapter) GetSerializationWriterFactory() absser.SerializationWriterFactory {
+	if a == nil {
+		return nil
+	}
 	return a.serializationWriterFactory
+}
+
+// GetParseNodeFactory returns the parse node factory currently in use for the request adapter service.
+func (a *NetHttpRequestAdapter) GetParseNodeFactory() absser.ParseNodeFactory {
+	if a == nil {
+		return nil
+	}
+	return a.parseNodeFactory
 }
 
 // EnableBackingStore enables the backing store proxies for the SerializationWriters and ParseNodes in use.
 func (a *NetHttpRequestAdapter) EnableBackingStore(factory store.BackingStoreFactory) {
+	if a == nil {
+		return
+	}
 	a.parseNodeFactory = abs.EnableBackingStoreForParseNodeFactory(a.parseNodeFactory)
 	a.serializationWriterFactory = abs.EnableBackingStoreForSerializationWriterFactory(a.serializationWriterFactory)
 	if factory != nil {
@@ -112,11 +126,17 @@ func (a *NetHttpRequestAdapter) EnableBackingStore(factory store.BackingStoreFac
 
 // SetBaseUrl sets the base url for every request.
 func (a *NetHttpRequestAdapter) SetBaseUrl(baseUrl string) {
+	if a == nil {
+		return
+	}
 	a.baseUrl = baseUrl
 }
 
 // GetBaseUrl gets the base url for every request.
 func (a *NetHttpRequestAdapter) GetBaseUrl() string {
+	if a == nil {
+		return ""
+	}
 	return a.baseUrl
 }
 
