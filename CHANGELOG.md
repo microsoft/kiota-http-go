@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0](https://github.com/microsoft/kiota-http-go/compare/v1.5.9...v1.6.0) (2026-10-27)
+
+
+### Features
+
+* **adapter:** add defensive nil receiver guards to NetHttpRequestAdapter methods ([8c8706a](https://github.com/microsoft/kiota-http-go/commit/8c8706af30e99d82fd598a74a365be1bb5756975))
+* **adapter:** add GetHttpClient and GetParseNodeFactory accessors to NetHttpRequestAdapter ([644dbc5](https://github.com/microsoft/kiota-http-go/commit/644dbc56b42d290d1d82710f364babc933f4be6c))
+* **adapter:** add GetParseNodeFactory accessor and nil receiver guards ([6d0e029](https://github.com/microsoft/kiota-http-go/commit/6d0e029c65a66ead0627840493d200a1211a3625))
+* **adapter:** remove GetHttpClient accessor per review feedback ([3c9bcf5](https://github.com/microsoft/kiota-http-go/commit/3c9bcf51d27b835c7fd45cd9ffd62bf70b8faa41))
+
+
+### Bug Fixes
+
+* **http:** add nil request guards and telemetry error recording across middleware handlers ([24817c7](https://github.com/microsoft/kiota-http-go/commit/24817c7e5b8e890495a6ceb7a09dc2c958e1bd7d))
+* **http:** add nil request guards and telemetry error recording across middleware handlers ([a47420f](https://github.com/microsoft/kiota-http-go/commit/a47420fa7fe36b18af896be6fdbecaad6dcb460d))
+* **http:** decode only query parameter names and prevent empty header index panic ([21c5b7c](https://github.com/microsoft/kiota-http-go/commit/21c5b7c1f683cc938339abc886a037c1ccaa3fc7))
+* **http:** decode only query parameter names and prevent empty header index panic ([81d307c](https://github.com/microsoft/kiota-http-go/commit/81d307cf6e729cf7d4149bca0c79abbd495fd0a6))
+* **http:** isolate request and response headers per request in HeadersInspectionHandler ([565e782](https://github.com/microsoft/kiota-http-go/commit/565e78215f3c415d761e39bf9c5e4614014d3105))
+* **http:** isolate request and response headers per request in HeadersInspectionHandler ([a942b8e](https://github.com/microsoft/kiota-http-go/commit/a942b8e02f132e71dd21d50242be5005cc0ba4f2))
+* **http:** record terminal retry errors on span, reject nil response in RetryHandler, and stub pipeline in nil-header test ([c9414bc](https://github.com/microsoft/kiota-http-go/commit/c9414bcfeb629f442680be9f06deb42d4170e57f))
+* **redirect:** resolve relative redirect URLs via ResolveReference ([4a8e3f5](https://github.com/microsoft/kiota-http-go/commit/4a8e3f5a370a5d48d94a4469852e82f2426291fe))
+* **redirect:** use ResolveReference for RFC-compliant relative redirect resolution ([0ef6db4](https://github.com/microsoft/kiota-http-go/commit/0ef6db4b97a05326371b00cb1d379ec27a737ebb))
+
 ## [1.5.9](https://github.com/microsoft/kiota-http-go/compare/v1.5.8...v1.5.9) (2026-10-19)
 
 
