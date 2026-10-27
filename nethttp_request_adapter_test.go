@@ -401,7 +401,6 @@ func TestNetHttpRequestAdapterAccessors(t *testing.T) {
 	assert.NotNil(t, adapter)
 
 	// Verify getters return expected instances
-	assert.NotNil(t, adapter.GetHttpClient())
 	assert.NotNil(t, adapter.GetParseNodeFactory())
 	assert.NotNil(t, adapter.GetSerializationWriterFactory())
 	assert.Equal(t, "", adapter.GetBaseUrl())
@@ -414,7 +413,6 @@ func TestNetHttpRequestAdapterNilReceiverSafety(t *testing.T) {
 	var nilAdapter *NetHttpRequestAdapter
 
 	// Accessors on nil adapter must be safe and not panic
-	assert.Nil(t, nilAdapter.GetHttpClient())
 	assert.Nil(t, nilAdapter.GetParseNodeFactory())
 	assert.Nil(t, nilAdapter.GetSerializationWriterFactory())
 	assert.Equal(t, "", nilAdapter.GetBaseUrl())
@@ -439,7 +437,6 @@ func TestNetHttpRequestAdapterCustomFactoriesAndBackingStore(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, adapter)
 
-	assert.Equal(t, customClient, adapter.GetHttpClient())
 	assert.Equal(t, customParseNodeFactory, adapter.GetParseNodeFactory())
 	assert.Equal(t, customWriterFactory, adapter.GetSerializationWriterFactory())
 
