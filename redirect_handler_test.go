@@ -560,3 +560,63 @@ func TestRedirectHandlerNilOption(t *testing.T) {
 		assert.NotNil(t, resp)
 	})
 }
+
+func TestRedirectHandlerClosesIntermediateResponseBody(t *testing.T) {
+	handler := NewRedirectHandler()
+	bodyTracker := &trackingReadCloser{Reader: strings.NewReader("redirecting...")}
+	redirectResp := &nethttp.Response{
+		StatusCode: found,
+		Header:     nethttp.Header{"Location": []string{"https://example.com/target"}},
+		Body:       bodyTracker,
+	}
+	finalResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/source", nil)
+	assert.NoError(t, err)
+
+	callCount := 0
+	pipeline := &dynamicPipeline{
+		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return redirectResp, nil
+			}
+			return finalResp, nil
+		},
+	}
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	assert.True(t, bodyTracker.closed, "intermediate redirect response body should be closed")
+}
+
+func TestRedirectHandlerHonorsPerRequestHeaderScrubber(t *testing.T) {
+	customScrubberCalled := false
+	customScrubber := func(request *nethttp.Request, originalURL *url.URL) {
+		customScrubberCalled = true
+		request.Header.Del("X-Custom-Secret")
+	}
+
+	handler := NewRedirectHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/source", nil)
+	assert.NoError(t, err)
+	req.Header.Set("X-Custom-Secret", "secret-value")
+
+	opt := &RedirectHandlerOptions{
+		MaxRedirects:          5,
+		ScrubSensitiveHeaders: customScrubber,
+	}
+	ctx := context.WithValue(req.Context(), redirectKeyValue, opt)
+	req = req.WithContext(ctx)
+
+	resp := &nethttp.Response{
+		StatusCode: found,
+		Header:     nethttp.Header{"Location": []string{"https://example.com/target"}},
+	}
+	redirectReq, err := handler.getRedirectRequest(req, resp)
+	assert.NoError(t, err)
+	assert.True(t, customScrubberCalled)
+	assert.Empty(t, redirectReq.Header.Get("X-Custom-Secret"))
+}
