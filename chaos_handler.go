@@ -283,7 +283,7 @@ func (middleware ChaosHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 		return nil, errors.New("req cannot be nil")
 	}
 	reqOption, ok := req.Context().Value(chaosHandlerKey).(chaosHandlerOptionsInt)
-	if !ok {
+	if !ok || isNil(reqOption) {
 		reqOption = middleware.options
 	}
 

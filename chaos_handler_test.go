@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"context"
 	"github.com/stretchr/testify/assert"
 	nethttp "net/http"
 	"net/http/httptest"
@@ -64,5 +65,26 @@ func TestChaosHandlerNilRequest(t *testing.T) {
 		resp, err := handler.Intercept(newNoopPipeline(), 0, nil)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
+	})
+}
+
+func TestChaosHandlerNilOption(t *testing.T) {
+	handler := NewChaosHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	var nilOpt *ChaosHandlerOptions
+	ctx := context.WithValue(req.Context(), chaosHandlerKey, nilOpt)
+	req = req.WithContext(ctx)
+
+	mockResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	pipeline := &stubPipeline{response: mockResp}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
 	})
 }

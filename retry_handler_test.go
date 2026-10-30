@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"context"
+	"strings"
 	"errors"
 	"go.opentelemetry.io/otel"
 	nethttp "net/http"
@@ -341,4 +342,56 @@ func TestRetryHandlerTerminalRetryErrorRecordedOnSpan(t *testing.T) {
 	require.NotNil(t, interceptSpan, "RetryHandler_Intercept span should be recorded")
 	assert.True(t, interceptSpan.ended, "span should be ended")
 	assert.Contains(t, interceptSpan.recordedErrors, expectedErr, "recorded errors should contain terminal retry error")
+}
+
+func TestRetryHandlerNilOption(t *testing.T) {
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	var nilOpt *RetryHandlerOptions
+	ctx := context.WithValue(req.Context(), retryKeyValue, nilOpt)
+	req = req.WithContext(ctx)
+
+	mockResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	pipeline := &stubPipeline{response: mockResp}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+}
+
+func TestRetryHandlerClosesResponseBodyOnRetry(t *testing.T) {
+	handler := NewRetryHandler()
+	bodyTracker := &trackingReadCloser{Reader: strings.NewReader("temporary error")}
+	resp503 := &nethttp.Response{
+		StatusCode: 503,
+		Header:     nethttp.Header{retryAfterHeader: []string{"0"}},
+		Body:       bodyTracker,
+	}
+	resp200 := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/data", nil)
+	assert.NoError(t, err)
+
+	callCount := 0
+	pipeline := &dynamicPipeline{
+		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return resp503, nil
+			}
+			return resp200, nil
+		},
+	}
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	assert.True(t, bodyTracker.closed, "retried response body should be closed")
 }

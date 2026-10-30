@@ -152,9 +152,21 @@ func getDefaultMiddleWare(middlewareMap map[abs.RequestOptionKey]Middleware) []M
 		}
 	}
 
+	middlewareOrder := []abs.RequestOptionKey{
+		retryKeyValue,
+		redirectKeyValue,
+		parametersNameDecodingKeyValue,
+		urlReplaceOptionKey,
+		userAgentKeyValue,
+		headersInspectionKeyValue,
+		compressKey,
+	}
+
 	var middleware []Middleware
-	for _, value := range middlewareMap {
-		middleware = append(middleware, value)
+	for _, key := range middlewareOrder {
+		if m, ok := middlewareMap[key]; ok {
+			middleware = append(middleware, m)
+		}
 	}
 
 	return middleware

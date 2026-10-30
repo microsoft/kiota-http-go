@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"context"
 	"errors"
 	"github.com/stretchr/testify/assert"
 	nethttp "net/http"
@@ -80,5 +81,26 @@ func TestUrlReplaceHandlerNilURL(t *testing.T) {
 		resp, err := handler.Intercept(newNoopPipeline(), 0, req)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
+	})
+}
+
+func TestUrlReplaceHandlerNilOption(t *testing.T) {
+	handler := NewUrlReplaceHandler(true, map[string]string{"foo": "bar"})
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/foo", nil)
+	assert.NoError(t, err)
+	var nilOpt *UrlReplaceOptions
+	ctx := context.WithValue(req.Context(), urlReplaceOptionKey, nilOpt)
+	req = req.WithContext(ctx)
+
+	mockResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	pipeline := &stubPipeline{response: mockResp}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
 	})
 }

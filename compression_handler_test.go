@@ -2,6 +2,8 @@ package nethttplibrary
 
 import (
 	"bytes"
+	"context"
+	"strings"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -167,4 +169,65 @@ func TestCompressionHandlerWorksWithEmptyBody(t *testing.T) {
 func TestResetTransport(t *testing.T) {
 	client := getDefaultClientWithoutMiddleware()
 	client.Transport = &nethttp.Transport{}
+}
+
+func TestCompressionHandlerNilRequest(t *testing.T) {
+	handler := NewCompressionHandler()
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(&stubPipeline{}, 0, nil)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}
+
+func TestCompressionHandlerNilOption(t *testing.T) {
+	handler := NewCompressionHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	var nilOpt *CompressionOptions
+	ctx := context.WithValue(req.Context(), compressKey, nilOpt)
+	req = req.WithContext(ctx)
+
+	mockResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	pipeline := &stubPipeline{response: mockResp}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+}
+
+func TestCompressionHandlerCloses415ResponseBodyOnRetry(t *testing.T) {
+	handler := NewCompressionHandler()
+	bodyTracker := &trackingReadCloser{Reader: strings.NewReader("unsupported media type")}
+	resp415 := &nethttp.Response{
+		StatusCode: 415,
+		Header:     nethttp.Header{},
+		Body:       bodyTracker,
+	}
+	resp200 := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	req, err := nethttp.NewRequest(nethttp.MethodPost, "https://example.com/upload", strings.NewReader("hello world"))
+	assert.NoError(t, err)
+
+	callCount := 0
+	pipeline := &dynamicPipeline{
+		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return resp415, nil
+			}
+			return resp200, nil
+		},
+	}
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	assert.True(t, bodyTracker.closed, "415 response body should be closed on retry")
 }

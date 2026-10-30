@@ -1,8 +1,9 @@
 package nethttplibrary
 
 import (
-	assert "github.com/stretchr/testify/assert"
+	"io"
 	"net/http"
+	assert "github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -69,4 +70,31 @@ func TestItAcceptsACustomizedTransport(t *testing.T) {
 func TestItGetsADefaultTransportIfNoneIsProvided(t *testing.T) {
 	customTransport := NewCustomTransport()
 	assert.NotNil(t, customTransport.middlewarePipeline.transport)
+}
+
+func TestGetObservabilityOptionsFromRequestWithNil(t *testing.T) {
+	assert.Nil(t, GetObservabilityOptionsFromRequest(nil))
+	reqWithoutContext := &http.Request{}
+	assert.Nil(t, GetObservabilityOptionsFromRequest(reqWithoutContext))
+}
+
+type dynamicPipeline struct {
+	next func(req *http.Request, middlewareIndex int) (*http.Response, error)
+}
+
+func (d *dynamicPipeline) Next(req *http.Request, middlewareIndex int) (*http.Response, error) {
+	if d.next != nil {
+		return d.next(req, middlewareIndex)
+	}
+	return nil, nil
+}
+
+type trackingReadCloser struct {
+	io.Reader
+	closed bool
+}
+
+func (t *trackingReadCloser) Close() error {
+	t.closed = true
+	return nil
 }
