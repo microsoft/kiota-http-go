@@ -144,6 +144,9 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 		executionCount < options.GetMaxRetries() &&
 		cumulativeDelay < time.Duration(absoluteMaxDelaySeconds)*time.Second &&
 		options.GetShouldRetry()(cumulativeDelay, executionCount, req, resp) {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
 		executionCount++
 		delay := middleware.getRetryDelay(req, resp, options, executionCount)
 		cumulativeDelay += delay
