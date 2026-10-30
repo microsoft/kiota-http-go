@@ -2,6 +2,9 @@ package nethttplibrary
 
 import (
 	"context"
+	"io"
+	"strings"
+	"go.opentelemetry.io/otel/trace"
 	"github.com/microsoft/kiota-abstractions-go/serialization"
 	nethttp "net/http"
 	httptest "net/http/httptest"
@@ -447,3 +450,46 @@ func TestNetHttpRequestAdapterCustomFactoriesAndBackingStore(t *testing.T) {
 }
 
 
+
+func TestShouldReturnNil(t *testing.T) {
+	adapter := &NetHttpRequestAdapter{}
+	assert.False(t, adapter.shouldReturnNil(nil))
+
+	resp204 := &nethttp.Response{StatusCode: 204}
+	assert.True(t, adapter.shouldReturnNil(resp204))
+
+	resp304 := &nethttp.Response{StatusCode: 304}
+	assert.True(t, adapter.shouldReturnNil(resp304))
+
+	resp302NoLocation := &nethttp.Response{
+		StatusCode: 302,
+		Header:     nethttp.Header{},
+	}
+	assert.True(t, adapter.shouldReturnNil(resp302NoLocation))
+
+	resp302WithLocation := &nethttp.Response{
+		StatusCode: 302,
+		Header:     nethttp.Header{"Location": []string{"https://example.com"}},
+	}
+	assert.False(t, adapter.shouldReturnNil(resp302WithLocation))
+
+	resp200 := &nethttp.Response{StatusCode: 200}
+	assert.False(t, adapter.shouldReturnNil(resp200))
+}
+
+func TestGetRootParseNodeEmptyBodyWithContentType(t *testing.T) {
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.NoError(t, err)
+
+	resp := &nethttp.Response{
+		StatusCode:    200,
+		ContentLength: -1,
+		Header:        nethttp.Header{"Content-Type": []string{"application/json"}},
+		Body:          io.NopCloser(strings.NewReader("")),
+	}
+	span := trace.SpanFromContext(context.Background())
+	node, _, err := adapter.getRootParseNode(context.Background(), resp, span)
+	assert.NoError(t, err)
+	assert.Nil(t, node)
+}
