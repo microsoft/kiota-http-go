@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"context"
 	"io"
 	nethttp "net/http"
 	httptest "net/http/httptest"
@@ -529,3 +530,33 @@ func TestRedirectMissingLocationReturnsError(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+
+func TestRedirectHandlerNilRequest(t *testing.T) {
+	handler := NewRedirectHandler()
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(&stubPipeline{}, 0, nil)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}
+
+func TestRedirectHandlerNilOption(t *testing.T) {
+	handler := NewRedirectHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	var nilOpt *RedirectHandlerOptions
+	ctx := context.WithValue(req.Context(), redirectKeyValue, nilOpt)
+	req = req.WithContext(ctx)
+
+	mockResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	pipeline := &stubPipeline{response: mockResp}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+}

@@ -125,7 +125,7 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 		return response, err
 	}
 	reqOption, ok := req.Context().Value(retryKeyValue).(retryHandlerOptionsInt)
-	if !ok {
+	if !ok || isNil(reqOption) {
 		reqOption = &middleware.options
 	}
 	response, err = middleware.retryRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, 0, observabilityName)
