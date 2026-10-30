@@ -117,3 +117,31 @@ func TestGetDefaultMiddlewares(t *testing.T) {
 		}
 	}
 }
+
+func TestGetDefaultMiddlewaresDeterministicOrder(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		middlewares := GetDefaultMiddlewares()
+		assert.Equal(t, 7, len(middlewares))
+
+		_, ok0 := middlewares[0].(*RetryHandler)
+		assert.True(t, ok0, "expected RetryHandler at index 0")
+
+		_, ok1 := middlewares[1].(*RedirectHandler)
+		assert.True(t, ok1, "expected RedirectHandler at index 1")
+
+		_, ok2 := middlewares[2].(*ParametersNameDecodingHandler)
+		assert.True(t, ok2, "expected ParametersNameDecodingHandler at index 2")
+
+		_, ok3 := middlewares[3].(*UrlReplaceHandler)
+		assert.True(t, ok3, "expected UrlReplaceHandler at index 3")
+
+		_, ok4 := middlewares[4].(*UserAgentHandler)
+		assert.True(t, ok4, "expected UserAgentHandler at index 4")
+
+		_, ok5 := middlewares[5].(*HeadersInspectionHandler)
+		assert.True(t, ok5, "expected HeadersInspectionHandler at index 5")
+
+		_, ok6 := middlewares[6].(*CompressionHandler)
+		assert.True(t, ok6, "expected CompressionHandler at index 6")
+	}
+}
