@@ -99,7 +99,7 @@ func (middleware UserAgentHandler) Intercept(pipeline Pipeline, middlewareIndex 
 		req = req.WithContext(ctx)
 	}
 	options, ok := req.Context().Value(userAgentKeyValue).(userAgentHandlerOptionsInt)
-	if !ok {
+	if !ok || isNil(options) {
 		options = &middleware.options
 	}
 	if options.GetEnabled() {

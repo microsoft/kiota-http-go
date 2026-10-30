@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -167,4 +168,34 @@ func TestCompressionHandlerWorksWithEmptyBody(t *testing.T) {
 func TestResetTransport(t *testing.T) {
 	client := getDefaultClientWithoutMiddleware()
 	client.Transport = &nethttp.Transport{}
+}
+
+func TestCompressionHandlerNilRequest(t *testing.T) {
+	handler := NewCompressionHandler()
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(&stubPipeline{}, 0, nil)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+}
+
+func TestCompressionHandlerNilOption(t *testing.T) {
+	handler := NewCompressionHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	var nilOpt *CompressionOptions
+	ctx := context.WithValue(req.Context(), compressKey, nilOpt)
+	req = req.WithContext(ctx)
+
+	mockResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	pipeline := &stubPipeline{response: mockResp}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
 }

@@ -3,6 +3,7 @@ package nethttplibrary
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -72,8 +73,11 @@ func (o CompressionOptions) ShouldCompress() bool {
 // Intercept is invoked by the middleware pipeline to either move the request/response
 // to the next middleware in the pipeline
 func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *http.Request) (*http.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
 	reqOption, ok := req.Context().Value(compressKey).(compression)
-	if !ok {
+	if !ok || isNil(reqOption) {
 		reqOption = c.options
 	}
 

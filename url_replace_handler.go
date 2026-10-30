@@ -73,7 +73,7 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 	}
 
 	reqOption, ok := req.Context().Value(urlReplaceOptionKey).(urlReplaceOptionsInt)
-	if !ok {
+	if !ok || isNil(reqOption) {
 		reqOption = &c.options
 	}
 

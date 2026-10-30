@@ -342,3 +342,24 @@ func TestRetryHandlerTerminalRetryErrorRecordedOnSpan(t *testing.T) {
 	assert.True(t, interceptSpan.ended, "span should be ended")
 	assert.Contains(t, interceptSpan.recordedErrors, expectedErr, "recorded errors should contain terminal retry error")
 }
+
+func TestRetryHandlerNilOption(t *testing.T) {
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	var nilOpt *RetryHandlerOptions
+	ctx := context.WithValue(req.Context(), retryKeyValue, nilOpt)
+	req = req.WithContext(ctx)
+
+	mockResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	pipeline := &stubPipeline{response: mockResp}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+}

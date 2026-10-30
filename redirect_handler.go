@@ -136,6 +136,9 @@ var errRedirectBodyNotReplayable = errors.New("redirect request body cannot be r
 
 // Intercept implements the interface and evaluates whether to follow a redirect response.
 func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)
 	ctx := req.Context()
 	var span trace.Span
@@ -152,7 +155,7 @@ func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex i
 		return response, err
 	}
 	reqOption, ok := req.Context().Value(redirectKeyValue).(redirectHandlerOptionsInt)
-	if !ok {
+	if !ok || isNil(reqOption) {
 		reqOption = &middleware.options
 	}
 	return middleware.redirectRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, observabilityName)
