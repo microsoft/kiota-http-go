@@ -45,6 +45,9 @@ var observabilityOptionsKeyValue = abs.RequestOptionKey{
 
 // GetObservabilityOptionsFromRequest returns the observability options from the request context
 func GetObservabilityOptionsFromRequest(req *nethttp.Request) ObservabilityOptionsInt {
+	if req == nil || req.Context() == nil {
+		return nil
+	}
 	if options, ok := req.Context().Value(observabilityOptionsKeyValue).(ObservabilityOptionsInt); ok {
 		return options
 	}
