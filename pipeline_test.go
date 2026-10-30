@@ -70,3 +70,9 @@ func TestItGetsADefaultTransportIfNoneIsProvided(t *testing.T) {
 	customTransport := NewCustomTransport()
 	assert.NotNil(t, customTransport.middlewarePipeline.transport)
 }
+
+func TestGetObservabilityOptionsFromRequestWithNil(t *testing.T) {
+	assert.Nil(t, GetObservabilityOptionsFromRequest(nil))
+	reqWithoutContext := &http.Request{}
+	assert.Nil(t, GetObservabilityOptionsFromRequest(reqWithoutContext))
+}
