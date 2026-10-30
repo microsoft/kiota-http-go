@@ -750,7 +750,7 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "getRootParseNode")
 	defer span.End()
 
-	if response.ContentLength == 0 {
+	if response == nil || response.Body == nil || response.ContentLength == 0 {
 		return nil, ctx, nil
 	}
 
@@ -758,6 +758,9 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	if err != nil {
 		spanForAttributes.RecordError(err)
 		return nil, ctx, err
+	}
+	if len(body) == 0 {
+		return nil, ctx, nil
 	}
 	contentType := a.getResponsePrimaryContentType(response)
 	if contentType == "" {
@@ -778,7 +781,10 @@ func (a *NetHttpRequestAdapter) purge(response *nethttp.Response) error {
 	return nil
 }
 func (a *NetHttpRequestAdapter) shouldReturnNil(response *nethttp.Response) bool {
-	return response.StatusCode == 204
+	if response == nil {
+		return false
+	}
+	return response.StatusCode == 204 || response.StatusCode == 304 || (response.StatusCode >= 300 && response.StatusCode < 400 && response.Header.Get("Location") == "")
 }
 
 // ErrorMappingFoundAttributeName is the attribute name used to indicate whether an error code mapping was found.
