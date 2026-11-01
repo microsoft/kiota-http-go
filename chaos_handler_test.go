@@ -57,7 +57,6 @@ func TestItCreatesANewChaosHandlerWithOptions(t *testing.T) {
 	assert.Equal(t, 400, resp.StatusCode)
 }
 
-
 func TestChaosHandlerNilRequest(t *testing.T) {
 	handler := NewChaosHandler()
 	assert.NotPanics(t, func() {
@@ -65,4 +64,128 @@ func TestChaosHandlerNilRequest(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 	})
+}
+
+func TestChaosHandlerUnmappedMethodsDoNotPanic(t *testing.T) {
+	options := &ChaosHandlerOptions{
+		ChaosPercentage: 100,
+		ChaosStrategy:   Random,
+	}
+	handler, err := NewChaosHandlerWithOptions(options)
+	assert.NoError(t, err)
+
+	unmappedMethods := []string{
+		nethttp.MethodHead,
+		nethttp.MethodOptions,
+		nethttp.MethodTrace,
+		nethttp.MethodConnect,
+		"QUERY",
+		"get",
+		"post",
+	}
+
+	for _, method := range unmappedMethods {
+		req, err := nethttp.NewRequest(method, "http://localhost/test", nil)
+		assert.NoError(t, err)
+		assert.NotPanics(t, func() {
+			resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			assert.True(t, resp.StatusCode >= 400)
+		}, "method %s should not panic", method)
+	}
+}
+
+func TestChaosHandlerStatusMapWithClientRequest(t *testing.T) {
+	statusMap := map[string]map[string]int{
+		"/users": {
+			nethttp.MethodGet: 501,
+		},
+	}
+	options := &ChaosHandlerOptions{
+		ChaosPercentage: 100,
+		ChaosStrategy:   Random,
+		BaseUrl:         "https://graph.microsoft.com/v1.0",
+		StatusMap:       statusMap,
+	}
+	handler, err := NewChaosHandlerWithOptions(options)
+	assert.NoError(t, err)
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://graph.microsoft.com/v1.0/users", nil)
+	assert.NoError(t, err)
+	assert.Empty(t, req.RequestURI)
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, 501, resp.StatusCode)
+}
+
+func TestChaosHandlerStatusMapPathFallback(t *testing.T) {
+	statusMap := map[string]map[string]int{
+		"/messages": {
+			nethttp.MethodGet: 503,
+		},
+	}
+	options := &ChaosHandlerOptions{
+		ChaosPercentage: 100,
+		ChaosStrategy:   Random,
+		StatusMap:       statusMap,
+	}
+	handler, err := NewChaosHandlerWithOptions(options)
+	assert.NoError(t, err)
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "http://localhost/messages", nil)
+	assert.NoError(t, err)
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, 503, resp.StatusCode)
+}
+
+func TestChaosHandlerResponseBodyStatusFallback(t *testing.T) {
+	options := &ChaosHandlerOptions{
+		ChaosPercentage: 100,
+		ChaosStrategy:   Manual,
+		StatusCode:      418, // I'm a teapot (not in custom httpStatusCode map)
+	}
+	handler, err := NewChaosHandlerWithOptions(options)
+	assert.NoError(t, err)
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "http://localhost/tea", nil)
+	assert.NoError(t, err)
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, 418, resp.StatusCode)
+	assert.Equal(t, "I'm a teapot", resp.Status)
+}
+
+func TestChaosHandlerStatusMapBaseUrlPrecedenceOverPath(t *testing.T) {
+	statusMap := map[string]map[string]int{
+		"/v1.0/users": {
+			nethttp.MethodGet: 418,
+		},
+		"^/users": {
+			nethttp.MethodGet: 501,
+		},
+	}
+	options := &ChaosHandlerOptions{
+		ChaosPercentage: 100,
+		ChaosStrategy:   Random,
+		BaseUrl:         "https://example.test/v1.0",
+		StatusMap:       statusMap,
+	}
+	handler, err := NewChaosHandlerWithOptions(options)
+	assert.NoError(t, err)
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.test/v1.0/users", nil)
+	assert.NoError(t, err)
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, 501, resp.StatusCode)
 }
