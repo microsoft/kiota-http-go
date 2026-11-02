@@ -247,7 +247,8 @@ func getStatusCode(handlerOptions chaosHandlerOptionsInt, req *nethttp.Request) 
 				if mapCode, mapCodeOk := definedResponses[requestMethod]; mapCodeOk {
 					return mapCode
 				}
-			} else if handlerOptions.GetBaseUrl() == "" && req != nil && req.URL != nil && req.URL.Path != "" {
+			}
+			if handlerOptions.GetBaseUrl() == "" && req != nil && req.URL != nil && req.URL.Path != "" {
 				if pathResponses, pathOk := statusMap[req.URL.Path]; pathOk {
 					if mapCode, mapCodeOk := pathResponses[requestMethod]; mapCodeOk {
 						return mapCode

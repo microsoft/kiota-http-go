@@ -235,3 +235,37 @@ func TestChaosHandlerStatusMapRegexWithFullUrlPreserved(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, 502, resp.StatusCode)
 }
+
+func TestChaosHandlerStatusMapExactPathWhenFullUrlLacksMethod(t *testing.T) {
+	statusMap := map[string]map[string]int{
+		"https://example.test/items/a+b": {
+			nethttp.MethodPost: 201,
+		},
+		"/items/a+b": {
+			nethttp.MethodGet: 418,
+		},
+	}
+	options := &ChaosHandlerOptions{
+		ChaosPercentage: 100,
+		ChaosStrategy:   Random,
+		StatusMap:       statusMap,
+	}
+	handler, err := NewChaosHandlerWithOptions(options)
+	assert.NoError(t, err)
+
+	reqGet, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.test/items/a+b", nil)
+	assert.NoError(t, err)
+
+	respGet, err := handler.Intercept(newNoopPipeline(), 0, reqGet)
+	assert.NoError(t, err)
+	assert.NotNil(t, respGet)
+	assert.Equal(t, 418, respGet.StatusCode)
+
+	reqPost, err := nethttp.NewRequest(nethttp.MethodPost, "https://example.test/items/a+b", nil)
+	assert.NoError(t, err)
+
+	respPost, err := handler.Intercept(newNoopPipeline(), 0, reqPost)
+	assert.NoError(t, err)
+	assert.NotNil(t, respPost)
+	assert.Equal(t, 201, respPost.StatusCode)
+}
