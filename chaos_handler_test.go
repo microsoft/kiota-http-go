@@ -189,3 +189,49 @@ func TestChaosHandlerStatusMapBaseUrlPrecedenceOverPath(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, 501, resp.StatusCode)
 }
+
+func TestChaosHandlerStatusMapRegexWithPathFallback(t *testing.T) {
+	statusMap := map[string]map[string]int{
+		"^/users/[0-9]+": {
+			nethttp.MethodGet: 503,
+		},
+	}
+	options := &ChaosHandlerOptions{
+		ChaosPercentage: 100,
+		ChaosStrategy:   Random,
+		StatusMap:       statusMap,
+	}
+	handler, err := NewChaosHandlerWithOptions(options)
+	assert.NoError(t, err)
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.test/users/123", nil)
+	assert.NoError(t, err)
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, 503, resp.StatusCode)
+}
+
+func TestChaosHandlerStatusMapRegexWithFullUrlPreserved(t *testing.T) {
+	statusMap := map[string]map[string]int{
+		`^https://example\.test/items/[0-9]+`: {
+			nethttp.MethodGet: 502,
+		},
+	}
+	options := &ChaosHandlerOptions{
+		ChaosPercentage: 100,
+		ChaosStrategy:   Random,
+		StatusMap:       statusMap,
+	}
+	handler, err := NewChaosHandlerWithOptions(options)
+	assert.NoError(t, err)
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.test/items/456", nil)
+	assert.NoError(t, err)
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, 502, resp.StatusCode)
+}

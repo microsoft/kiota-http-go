@@ -256,6 +256,9 @@ func getStatusCode(handlerOptions chaosHandlerOptionsInt, req *nethttp.Request) 
 			}
 			for key := range statusMap {
 				match, _ := regexp.MatchString(key+"$", relativeUrl)
+				if !match && handlerOptions.GetBaseUrl() == "" && req != nil && req.URL != nil && req.URL.Path != "" {
+					match, _ = regexp.MatchString(key+"$", req.URL.Path)
+				}
 				if match {
 					responseCode := statusMap[key][requestMethod]
 					if responseCode != 0 {
