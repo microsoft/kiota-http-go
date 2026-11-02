@@ -199,7 +199,14 @@ var httpStatusCode = map[int]string{
 }
 
 func generateRandomStatusCode(request *nethttp.Request) int {
-	statusCodeArray := methodStatusCode[request.Method]
+	method := "GET"
+	if request != nil && request.Method != "" {
+		method = strings.ToUpper(request.Method)
+	}
+	statusCodeArray, ok := methodStatusCode[method]
+	if !ok || len(statusCodeArray) == 0 {
+		statusCodeArray = methodStatusCode["GET"]
+	}
 	return statusCodeArray[rand.Intn(len(statusCodeArray))]
 }
 
@@ -213,9 +220,19 @@ func getRelativeURL(handlerOptions chaosHandlerOptionsInt, url string) string {
 }
 
 func getStatusCode(handlerOptions chaosHandlerOptionsInt, req *nethttp.Request) int {
-	requestMethod := req.Method
+	requestMethod := "GET"
+	if req != nil && req.Method != "" {
+		requestMethod = strings.ToUpper(req.Method)
+	}
 	statusMap := handlerOptions.GetStatusMap()
-	requestURL := req.RequestURI
+	requestURL := ""
+	if req != nil {
+		if req.URL != nil {
+			requestURL = req.URL.String()
+		} else {
+			requestURL = req.RequestURI
+		}
+	}
 
 	if handlerOptions.GetChaosStrategy() == Manual {
 		return handlerOptions.GetStatusCode()
@@ -230,14 +247,23 @@ func getStatusCode(handlerOptions chaosHandlerOptionsInt, req *nethttp.Request) 
 				if mapCode, mapCodeOk := definedResponses[requestMethod]; mapCodeOk {
 					return mapCode
 				}
-			} else {
-				for key := range statusMap {
-					match, _ := regexp.MatchString(key+"$", relativeUrl)
-					if match {
-						responseCode := statusMap[key][requestMethod]
-						if responseCode != 0 {
-							return responseCode
-						}
+			}
+			if handlerOptions.GetBaseUrl() == "" && req != nil && req.URL != nil && req.URL.Path != "" {
+				if pathResponses, pathOk := statusMap[req.URL.Path]; pathOk {
+					if mapCode, mapCodeOk := pathResponses[requestMethod]; mapCodeOk {
+						return mapCode
+					}
+				}
+			}
+			for key := range statusMap {
+				match, _ := regexp.MatchString(key+"$", relativeUrl)
+				if !match && handlerOptions.GetBaseUrl() == "" && req != nil && req.URL != nil && req.URL.Path != "" {
+					match, _ = regexp.MatchString(key+"$", req.URL.Path)
+				}
+				if match {
+					responseCode := statusMap[key][requestMethod]
+					if responseCode != 0 {
+						return responseCode
 					}
 				}
 			}
@@ -253,17 +279,28 @@ func createResponseBody(handlerOptions chaosHandlerOptionsInt, statusCode int) *
 	}
 
 	var stringReader *strings.Reader
-	if statusCode > 400 {
+	if statusCode >= 400 {
 		codeMessage := httpStatusCode[statusCode]
+		if codeMessage == "" {
+			codeMessage = nethttp.StatusText(statusCode)
+		}
 		errMessage := handlerOptions.GetStatusMessage()
 		stringReader = strings.NewReader("error : { code :  " + codeMessage + " , message : " + errMessage + " }")
 	} else {
 		stringReader = strings.NewReader("{}")
 	}
 
+	status := handlerOptions.GetStatusMessage()
+	if status == "" {
+		status = httpStatusCode[statusCode]
+		if status == "" {
+			status = nethttp.StatusText(statusCode)
+		}
+	}
+
 	return &nethttp.Response{
 		StatusCode: statusCode,
-		Status:     handlerOptions.GetStatusMessage(),
+		Status:     status,
 		Body:       io.NopCloser(stringReader),
 		Header:     handlerOptions.GetHeaders(),
 	}
