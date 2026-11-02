@@ -69,16 +69,25 @@ func (options *UserAgentHandlerOptions) GetKey() abs.RequestOptionKey {
 
 // GetEnabled returns the value of the enabled property
 func (options *UserAgentHandlerOptions) GetEnabled() bool {
+	if options == nil {
+		return false
+	}
 	return options.Enabled
 }
 
 // GetProductName returns the value of the product name property
 func (options *UserAgentHandlerOptions) GetProductName() string {
+	if options == nil {
+		return ""
+	}
 	return options.ProductName
 }
 
 // GetProductVersion returns the value of the product version property
 func (options *UserAgentHandlerOptions) GetProductVersion() string {
+	if options == nil {
+		return ""
+	}
 	return options.ProductVersion
 }
 
@@ -99,7 +108,7 @@ func (middleware UserAgentHandler) Intercept(pipeline Pipeline, middlewareIndex 
 		req = req.WithContext(ctx)
 	}
 	options, ok := req.Context().Value(userAgentKeyValue).(userAgentHandlerOptionsInt)
-	if !ok {
+	if !ok || options == nil || options == (*UserAgentHandlerOptions)(nil) {
 		options = &middleware.options
 	}
 	if options.GetEnabled() {
