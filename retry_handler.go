@@ -117,6 +117,13 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 		defer span.End()
 		req = req.WithContext(ctx)
 	}
+	var origHeader nethttp.Header
+	if req.Header != nil {
+		origHeader = req.Header.Clone()
+	}
+	origContentLength := req.ContentLength
+	origGetBody := req.GetBody
+
 	response, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
 		if span != nil {
@@ -128,14 +135,14 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 	if !ok || isNil(reqOption) {
 		reqOption = &middleware.options
 	}
-	response, err = middleware.retryRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, 0, observabilityName)
+	response, err = middleware.retryRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, 0, observabilityName, origHeader, origContentLength, origGetBody)
 	if err != nil && span != nil {
 		span.RecordError(err)
 	}
 	return response, err
 }
 
-func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeline, middlewareIndex int, options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response, executionCount int, cumulativeDelay time.Duration, observabilityName string) (*nethttp.Response, error) {
+func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeline, middlewareIndex int, options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response, executionCount int, cumulativeDelay time.Duration, observabilityName string, origHeader nethttp.Header, origContentLength int64, origGetBody func() (io.ReadCloser, error)) (*nethttp.Response, error) {
 	if resp == nil {
 		return nil, errors.New("response cannot be nil")
 	}
@@ -150,8 +157,18 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 		executionCount++
 		delay := middleware.getRetryDelay(req, resp, options, executionCount)
 		cumulativeDelay += delay
+		if origHeader != nil {
+			req.Header = origHeader.Clone()
+		}
+		req.ContentLength = origContentLength
+		req.GetBody = origGetBody
 		req.Header.Set(retryAttemptHeader, strconv.Itoa(executionCount))
-		if req.Body != nil {
+		if origGetBody != nil {
+			newBody, err := origGetBody()
+			if err == nil {
+				req.Body = newBody
+			}
+		} else if req.Body != nil {
 			s, ok := req.Body.(io.Seeker)
 			if ok {
 				s.Seek(0, io.SeekStart)
@@ -188,7 +205,7 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 			}
 			return response, err
 		}
-		return middleware.retryRequest(ctx, pipeline, middlewareIndex, options, req, response, executionCount, cumulativeDelay, observabilityName)
+		return middleware.retryRequest(ctx, pipeline, middlewareIndex, options, req, response, executionCount, cumulativeDelay, observabilityName, origHeader, origContentLength, origGetBody)
 	}
 	return resp, nil
 }

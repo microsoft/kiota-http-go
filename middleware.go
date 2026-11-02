@@ -16,7 +16,7 @@ func isNil(i any) bool {
 		return true
 	}
 	switch reflect.TypeOf(i).Kind() {
-	case reflect.Ptr, reflect.Map, reflect.Array, reflect.Chan, reflect.Slice, reflect.Interface:
+	case reflect.Ptr, reflect.Map, reflect.Func, reflect.Chan, reflect.Slice, reflect.Interface, reflect.UnsafePointer:
 		return reflect.ValueOf(i).IsNil()
 	}
 	return false

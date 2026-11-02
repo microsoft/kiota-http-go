@@ -1,11 +1,17 @@
 package nethttplibrary
 
 import (
-	abstractions "github.com/microsoft/kiota-abstractions-go"
-	"github.com/stretchr/testify/assert"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"io"
 	nethttp "net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	abstractions "github.com/microsoft/kiota-abstractions-go"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetDefaultMiddleWareWithMultipleOptions(t *testing.T) {
@@ -144,4 +150,54 @@ func TestGetDefaultMiddlewaresDeterministicOrder(t *testing.T) {
 		_, ok6 := middlewares[6].(*CompressionHandler)
 		assert.True(t, ok6, "expected CompressionHandler at index 6")
 	}
+}
+
+func TestDefaultPipelinePostRetryWithObservability(t *testing.T) {
+	postPayload := []byte("default pipeline post request body with retry and observability")
+	attempts := 0
+
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		attempts++
+		assert.Equal(t, nethttp.MethodPost, req.Method)
+		assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"), "expected Content-Encoding: gzip on attempt %d", attempts)
+
+		// Decompress body and verify it matches the original postPayload on all attempts
+		gzipReader, err := gzip.NewReader(req.Body)
+		assert.NoError(t, err, "attempt %d body should be valid gzip", attempts)
+		if err == nil {
+			decompressed, readErr := io.ReadAll(gzipReader)
+			assert.NoError(t, readErr)
+			_ = gzipReader.Close()
+			assert.Equal(t, postPayload, decompressed, "attempt %d payload mismatch", attempts)
+		}
+
+		if attempts == 1 {
+			res.Header().Set("Retry-After", "0")
+			res.WriteHeader(nethttp.StatusTooManyRequests)
+			return
+		}
+
+		res.WriteHeader(nethttp.StatusOK)
+		_, _ = res.Write([]byte("ok"))
+	}))
+	defer testServer.Close()
+
+	client := GetDefaultClient()
+	req, err := nethttp.NewRequest(nethttp.MethodPost, testServer.URL, bytes.NewReader(postPayload))
+	assert.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), obsOptions.GetKey(), obsOptions)
+	req = req.WithContext(ctx)
+
+	resp, err := client.Do(req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	if resp != nil {
+		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}
+	assert.Equal(t, 2, attempts)
 }

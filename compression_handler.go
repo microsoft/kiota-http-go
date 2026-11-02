@@ -118,6 +118,10 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Body = compressedBody
 	req.ContentLength = int64(size)
+	req.GetBody = func() (io.ReadCloser, error) {
+		r, _, err := compressReqBody(unCompressedBody)
+		return r, err
+	}
 
 	if span != nil {
 		span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)))
@@ -137,6 +141,9 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		delete(req.Header, "Content-Encoding")
 		req.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
 		req.ContentLength = unCompressedContentLength
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(unCompressedBody)), nil
+		}
 
 		if span != nil {
 			span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)),

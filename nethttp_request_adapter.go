@@ -296,8 +296,12 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		return nil, err
 	}
 	if len(requestInfo.Content) > 0 {
-		reader := bytes.NewReader(requestInfo.Content)
+		content := requestInfo.Content
+		reader := bytes.NewReader(content)
 		request.Body = NopCloser(reader)
+		request.GetBody = func() (io.ReadCloser, error) {
+			return NopCloser(bytes.NewReader(content)), nil
+		}
 	}
 	if request.Header == nil {
 		request.Header = make(nethttp.Header)

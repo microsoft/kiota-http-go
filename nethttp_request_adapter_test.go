@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"compress/gzip"
 	"context"
 	"io"
 	"strings"
@@ -492,4 +493,56 @@ func TestGetRootParseNodeEmptyBodyWithContentType(t *testing.T) {
 	node, _, err := adapter.getRootParseNode(context.Background(), resp, span)
 	assert.NoError(t, err)
 	assert.Nil(t, node)
+}
+
+func TestDefaultPipelineAdapterPostRetryWithObservability(t *testing.T) {
+	postPayload := []byte("adapter post request body with retry and observability")
+	attempts := 0
+
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		attempts++
+		assert.Equal(t, nethttp.MethodPost, req.Method)
+		assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"), "expected Content-Encoding: gzip on attempt %d", attempts)
+
+		gzipReader, err := gzip.NewReader(req.Body)
+		assert.NoError(t, err, "attempt %d body should be valid gzip", attempts)
+		if err == nil {
+			decompressed, readErr := io.ReadAll(gzipReader)
+			assert.NoError(t, readErr)
+			_ = gzipReader.Close()
+			assert.Equal(t, postPayload, decompressed, "attempt %d payload mismatch", attempts)
+		}
+
+		if attempts == 1 {
+			res.Header().Set("Retry-After", "0")
+			res.WriteHeader(nethttp.StatusTooManyRequests)
+			return
+		}
+
+		res.WriteHeader(nethttp.StatusNoContent)
+	}))
+	defer testServer.Close()
+
+	uri, err := url.Parse(testServer.URL)
+	assert.NoError(t, err)
+
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityOptions(
+		authProvider,
+		nil,
+		nil,
+		GetDefaultClient(),
+		ObservabilityOptions{},
+	)
+	assert.NoError(t, err)
+
+	requestInfo := abs.NewRequestInformation()
+	requestInfo.SetUri(*uri)
+	requestInfo.Method = abs.POST
+	requestInfo.Content = postPayload
+	requestInfo.Headers.Add("Content-Type", "application/octet-stream")
+
+	err = adapter.SendNoContent(context.Background(), requestInfo, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, attempts)
 }

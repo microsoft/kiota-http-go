@@ -117,8 +117,8 @@ func (options *RedirectHandlerOptions) GetMaxRedirect() int {
 
 // GetScrubSensitiveHeaders returns the header scrubbing function.
 func (options *RedirectHandlerOptions) GetScrubSensitiveHeaders() ScrubSensitiveHeaders {
-	if options == nil || options.ScrubSensitiveHeaders == nil {
-		return DefaultScrubSensitiveHeaders
+	if options == nil {
+		return nil
 	}
 	return options.ScrubSensitiveHeaders
 }
@@ -254,9 +254,10 @@ func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, r
 			scrubber = reqOption.GetScrubSensitiveHeaders()
 		}
 	}
-	if scrubber != nil {
-		scrubber(result, request.URL)
+	if scrubber == nil {
+		scrubber = DefaultScrubSensitiveHeaders
 	}
+	scrubber(result, request.URL)
 
 	return result, nil
 }

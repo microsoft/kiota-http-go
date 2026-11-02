@@ -620,3 +620,34 @@ func TestRedirectHandlerHonorsPerRequestHeaderScrubber(t *testing.T) {
 	assert.True(t, customScrubberCalled)
 	assert.Empty(t, redirectReq.Header.Get("X-Custom-Secret"))
 }
+
+func TestRedirectHandlerKeepsMiddlewareScrubberWhenRequestOptionHasNilScrubber(t *testing.T) {
+	middlewareScrubberCalled := false
+	middlewareScrubber := func(request *nethttp.Request, originalURL *url.URL) {
+		middlewareScrubberCalled = true
+		request.Header.Del("X-Api-Key")
+	}
+
+	handler := NewRedirectHandlerWithOptions(RedirectHandlerOptions{
+		ScrubSensitiveHeaders: middlewareScrubber,
+	})
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/source", nil)
+	assert.NoError(t, err)
+	req.Header.Set("X-Api-Key", "my-secret-key")
+
+	// Per-request options with unset ScrubSensitiveHeaders should NOT overwrite the middleware's scrubber
+	opt := &RedirectHandlerOptions{
+		MaxRedirects: 3,
+	}
+	ctx := context.WithValue(req.Context(), redirectKeyValue, opt)
+	req = req.WithContext(ctx)
+
+	resp := &nethttp.Response{
+		StatusCode: found,
+		Header:     nethttp.Header{"Location": []string{"https://other-domain.com/target"}},
+	}
+	redirectReq, err := handler.getRedirectRequest(req, resp)
+	assert.NoError(t, err)
+	assert.True(t, middlewareScrubberCalled)
+	assert.Empty(t, redirectReq.Header.Get("X-Api-Key"))
+}
