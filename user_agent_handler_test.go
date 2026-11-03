@@ -108,6 +108,83 @@ func TestUserAgentHandlerNilHeader(t *testing.T) {
 	assert.NotEmpty(t, req.Header.Get(userAgentHeaderKey))
 }
 
+func TestUserAgentHandlerWithoutVersion(t *testing.T) {
+	options := &UserAgentHandlerOptions{Enabled: true, ProductName: "MyApp", ProductVersion: ""}
+	handler := NewUserAgentHandlerWithOptions(options)
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, "MyApp", req.Header.Get(userAgentHeaderKey))
+}
+
+func TestUserAgentHandlerEmptyProductAndVersion(t *testing.T) {
+	options := &UserAgentHandlerOptions{Enabled: true, ProductName: "", ProductVersion: ""}
+	handler := NewUserAgentHandlerWithOptions(options)
+
+	// Clean request: should not set empty token or trailing slash
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Empty(t, req.Header.Get(userAgentHeaderKey))
+
+	// Pre-existing header: should not append " /"
+	req2, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	req2.Header.Set(userAgentHeaderKey, "ExistingApp/1.0")
+	pipeline2 := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
+	resp2, err := handler.Intercept(pipeline2, 0, req2)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp2)
+	assert.Equal(t, "ExistingApp/1.0", req2.Header.Get(userAgentHeaderKey))
+}
+
+func TestUserAgentHandlerVersionlessWithPreExistingHeader(t *testing.T) {
+	options := &UserAgentHandlerOptions{Enabled: true, ProductName: "MyApp", ProductVersion: ""}
+	handler := NewUserAgentHandlerWithOptions(options)
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	req.Header.Set(userAgentHeaderKey, "MyAppHelper/1.0")
+
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, "MyAppHelper/1.0 MyApp", req.Header.Get(userAgentHeaderKey))
+
+	// Intercepting again should not duplicate "MyApp"
+	resp, err = handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, "MyAppHelper/1.0 MyApp", req.Header.Get(userAgentHeaderKey))
+}
+
 func TestUserAgentHandlerNilOption(t *testing.T) {
 	handler := NewUserAgentHandler()
 	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
@@ -126,5 +203,37 @@ func TestUserAgentHandlerNilOption(t *testing.T) {
 		resp, err := handler.Intercept(pipeline, 0, req)
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
+	})
+	assert.Contains(t, req.Header.Get(userAgentHeaderKey), "kiota-go")
+}
+
+func TestUserAgentHandlerTypedNilOptionInContext(t *testing.T) {
+	handler := NewUserAgentHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+
+	ctx := context.WithValue(req.Context(), userAgentKeyValue, (*UserAgentHandlerOptions)(nil))
+	req = req.WithContext(ctx)
+
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+	assert.Contains(t, req.Header.Get(userAgentHeaderKey), "kiota-go")
+}
+
+func TestUserAgentHandlerOptionsNilSafety(t *testing.T) {
+	var nilOptions *UserAgentHandlerOptions
+	assert.NotPanics(t, func() {
+		assert.False(t, nilOptions.GetEnabled())
+		assert.Equal(t, "", nilOptions.GetProductName())
+		assert.Equal(t, "", nilOptions.GetProductVersion())
 	})
 }
