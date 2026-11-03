@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	nethttp "net/http"
 	"strconv"
@@ -69,12 +70,17 @@ func (options *RetryHandlerOptions) GetKey() abs.RequestOptionKey {
 
 // GetShouldRetry returns the should retry callback function which evaluates the response for retrial
 func (options *RetryHandlerOptions) GetShouldRetry() func(delay time.Duration, executionCount int, request *nethttp.Request, response *nethttp.Response) bool {
+	if options == nil || options.ShouldRetry == nil {
+		return func(delay time.Duration, executionCount int, request *nethttp.Request, response *nethttp.Response) bool {
+			return true
+		}
+	}
 	return options.ShouldRetry
 }
 
 // GetDelaySeconds returns the delays in seconds between retries
 func (options *RetryHandlerOptions) GetDelaySeconds() int {
-	if options.DelaySeconds < 1 {
+	if options == nil || options.DelaySeconds < 1 {
 		return defaultDelaySeconds
 	} else if options.DelaySeconds > absoluteMaxDelaySeconds {
 		return absoluteMaxDelaySeconds
@@ -85,7 +91,7 @@ func (options *RetryHandlerOptions) GetDelaySeconds() int {
 
 // GetMaxRetries returns the maximum number of times a request can be retried
 func (options *RetryHandlerOptions) GetMaxRetries() int {
-	if options.MaxRetries < 1 {
+	if options == nil || options.MaxRetries < 1 {
 		return defaultMaxRetries
 	} else if options.MaxRetries > absoluteMaxRetries {
 		return absoluteMaxRetries
@@ -202,20 +208,46 @@ func (middleware RetryHandler) isRetriableRequest(req *nethttp.Request) bool {
 }
 
 func (middleware RetryHandler) getRetryDelay(req *nethttp.Request, resp *nethttp.Response, options retryHandlerOptionsInt, executionCount int) time.Duration {
+	maxDelay := time.Duration(absoluteMaxDelaySeconds) * time.Second
+	var delay time.Duration
 	retryAfter := resp.Header.Get(retryAfterHeader)
 	if retryAfter != "" {
 		retryAfterDelay, err := strconv.ParseFloat(retryAfter, 64)
 		if err == nil {
-			return time.Duration(retryAfterDelay) * time.Second
+			if !math.IsNaN(retryAfterDelay) && !math.IsInf(retryAfterDelay, 0) && retryAfterDelay >= 0 {
+				if retryAfterDelay > float64(absoluteMaxDelaySeconds) {
+					retryAfterDelay = float64(absoluteMaxDelaySeconds)
+				}
+				delay = time.Duration(retryAfterDelay * float64(time.Second))
+			} else {
+				delay = exponentialBackOffDelay(options.GetDelaySeconds(), executionCount)
+			}
+		} else {
+			// parse the header if it's a date (supports RFC1123, RFC850, and ANSIC per RFC 9110)
+			t, err := nethttp.ParseTime(retryAfter)
+			if err != nil {
+				t, err = time.Parse(time.RFC1123, retryAfter)
+			}
+			if err == nil {
+				now := time.Now()
+				if t.Before(now) {
+					delay = 0
+				} else if t.After(now.Add(maxDelay)) {
+					delay = maxDelay
+				} else {
+					delay = t.Sub(now)
+				}
+			} else {
+				delay = exponentialBackOffDelay(options.GetDelaySeconds(), executionCount)
+			}
 		}
-
-		// parse the header if it's a date
-		t, err := time.Parse(time.RFC1123, retryAfter)
-		if err == nil {
-			return t.Sub(time.Now())
-		}
+	} else {
+		delay = exponentialBackOffDelay(options.GetDelaySeconds(), executionCount)
 	}
-	return exponentialBackOffDelay(options.GetDelaySeconds(), executionCount)
+	if delay > maxDelay {
+		delay = maxDelay
+	}
+	return delay
 }
 
 func exponentialBackOffDelay(delaySeconds, executionCount int) time.Duration {

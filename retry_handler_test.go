@@ -342,3 +342,146 @@ func TestRetryHandlerTerminalRetryErrorRecordedOnSpan(t *testing.T) {
 	assert.True(t, interceptSpan.ended, "span should be ended")
 	assert.Contains(t, interceptSpan.recordedErrors, expectedErr, "recorded errors should contain terminal retry error")
 }
+
+func TestRetryHandler_GetRetryDelay_FractionalSeconds(t *testing.T) {
+	handler := NewRetryHandler()
+	opt := &RetryHandlerOptions{DelaySeconds: 3, MaxRetries: 3}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+
+	resp15 := &nethttp.Response{
+		StatusCode: 429,
+		Header:     nethttp.Header{"Retry-After": []string{"1.5"}},
+	}
+	delay15 := handler.getRetryDelay(req, resp15, opt, 1)
+	assert.Equal(t, 1500*time.Millisecond, delay15)
+
+	resp025 := &nethttp.Response{
+		StatusCode: 429,
+		Header:     nethttp.Header{"Retry-After": []string{"0.25"}},
+	}
+	delay025 := handler.getRetryDelay(req, resp025, opt, 1)
+	assert.Equal(t, 250*time.Millisecond, delay025)
+}
+
+func TestRetryHandler_GetRetryDelay_NegativeSecondsFallback(t *testing.T) {
+	handler := NewRetryHandler()
+	opt := &RetryHandlerOptions{DelaySeconds: 2, MaxRetries: 3}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+
+	respNeg := &nethttp.Response{
+		StatusCode: 429,
+		Header:     nethttp.Header{"Retry-After": []string{"-10"}},
+	}
+	delay := handler.getRetryDelay(req, respNeg, opt, 1)
+	// Must fall back to exponential backoff and never return negative duration
+	assert.GreaterOrEqual(t, delay, 2*time.Second)
+	assert.LessOrEqual(t, delay, 3*time.Second+100*time.Millisecond)
+}
+
+func TestRetryHandler_GetRetryDelay_InvalidFloatFallback(t *testing.T) {
+	handler := NewRetryHandler()
+	opt := &RetryHandlerOptions{DelaySeconds: 1, MaxRetries: 3}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+
+	for _, invalid := range []string{"NaN", "+Inf", "-Inf"} {
+		resp := &nethttp.Response{
+			StatusCode: 429,
+			Header:     nethttp.Header{"Retry-After": []string{invalid}},
+		}
+		delay := handler.getRetryDelay(req, resp, opt, 1)
+		assert.GreaterOrEqual(t, delay, 1*time.Second, "delay for %s should be non-negative exponential fallback", invalid)
+	}
+}
+
+func TestRetryHandler_GetRetryDelay_HttpDateRFC850AndANSIC(t *testing.T) {
+	handler := NewRetryHandler()
+	opt := &RetryHandlerOptions{DelaySeconds: 2, MaxRetries: 3}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+
+	futureTime := time.Now().Add(10 * time.Second)
+
+	// RFC 850 format: "Sunday, 06-Nov-94 08:49:37 GMT"
+	respRFC850 := &nethttp.Response{
+		StatusCode: 429,
+		Header:     nethttp.Header{"Retry-After": []string{futureTime.UTC().Format(time.RFC850)}},
+	}
+	delayRFC850 := handler.getRetryDelay(req, respRFC850, opt, 1)
+	assert.Greater(t, delayRFC850, 7*time.Second)
+	assert.LessOrEqual(t, delayRFC850, 11*time.Second)
+
+	// ANSI C asctime format: "Sun Nov  6 08:49:37 1994"
+	respANSIC := &nethttp.Response{
+		StatusCode: 429,
+		Header:     nethttp.Header{"Retry-After": []string{futureTime.UTC().Format(time.ANSIC)}},
+	}
+	delayANSIC := handler.getRetryDelay(req, respANSIC, opt, 1)
+	assert.Greater(t, delayANSIC, 7*time.Second)
+	assert.LessOrEqual(t, delayANSIC, 11*time.Second)
+}
+
+func TestRetryHandler_GetRetryDelay_PastHttpDateReturnsZero(t *testing.T) {
+	handler := NewRetryHandler()
+	opt := &RetryHandlerOptions{DelaySeconds: 2, MaxRetries: 3}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+
+	pastTime := time.Now().Add(-10 * time.Second)
+	respPast := &nethttp.Response{
+		StatusCode: 429,
+		Header:     nethttp.Header{"Retry-After": []string{pastTime.UTC().Format(time.RFC1123)}},
+	}
+	delay := handler.getRetryDelay(req, respPast, opt, 1)
+	// Per RFC 9110 Section 10.2.3, an HTTP-date in the past is treated as a delay of 0 seconds.
+	assert.Equal(t, time.Duration(0), delay)
+}
+
+func TestRetryHandler_GetRetryDelay_CapsAtAbsoluteMaxDelay(t *testing.T) {
+	handler := NewRetryHandler()
+	opt := &RetryHandlerOptions{DelaySeconds: 2, MaxRetries: 3}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+
+	testCases := []string{
+		"86400",
+		"10000000000",
+		"100000000000000",
+		time.Now().Add(100000 * time.Hour).UTC().Format(time.RFC1123),
+	}
+
+	expectedMaxDelay := time.Duration(absoluteMaxDelaySeconds) * time.Second
+	for _, retryAfterVal := range testCases {
+		resp := &nethttp.Response{
+			StatusCode: 429,
+			Header:     nethttp.Header{"Retry-After": []string{retryAfterVal}},
+		}
+		delay := handler.getRetryDelay(req, resp, opt, 1)
+		assert.Equal(t, expectedMaxDelay, delay, "failed for Retry-After value: %s", retryAfterVal)
+	}
+}
+
+func TestRetryHandler_OptionsNilSafety(t *testing.T) {
+	var nilOpt *RetryHandlerOptions
+	assert.Equal(t, defaultDelaySeconds, nilOpt.GetDelaySeconds())
+	assert.Equal(t, defaultMaxRetries, nilOpt.GetMaxRetries())
+	shouldRetryFn := nilOpt.GetShouldRetry()
+	require.NotNil(t, shouldRetryFn)
+	assert.True(t, shouldRetryFn(0, 0, nil, nil))
+
+	emptyOpt := &RetryHandlerOptions{}
+	assert.Equal(t, defaultDelaySeconds, emptyOpt.GetDelaySeconds())
+	assert.Equal(t, defaultMaxRetries, emptyOpt.GetMaxRetries())
+	emptyShouldRetryFn := emptyOpt.GetShouldRetry()
+	require.NotNil(t, emptyShouldRetryFn)
+	assert.True(t, emptyShouldRetryFn(0, 0, nil, nil))
+
+	optBounds := &RetryHandlerOptions{
+		DelaySeconds: 9999,
+		MaxRetries:   9999,
+	}
+	assert.Equal(t, absoluteMaxDelaySeconds, optBounds.GetDelaySeconds())
+	assert.Equal(t, absoluteMaxRetries, optBounds.GetMaxRetries())
+}
