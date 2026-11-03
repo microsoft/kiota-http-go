@@ -3,13 +3,14 @@ package nethttplibrary
 import (
 	"compress/gzip"
 	"context"
-	"io"
-	"strings"
-	"go.opentelemetry.io/otel/trace"
 	"github.com/microsoft/kiota-abstractions-go/serialization"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"io"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	abs "github.com/microsoft/kiota-abstractions-go"
@@ -450,7 +451,140 @@ func TestNetHttpRequestAdapterCustomFactoriesAndBackingStore(t *testing.T) {
 	assert.NotNil(t, adapter.GetSerializationWriterFactory())
 }
 
+func TestNetHttpRequestAdapter_SpanAttributes_ServerAddressAndUrlScheme(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
 
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	require.NoError(t, err)
+
+	uri, err := url.Parse("https://graph.microsoft.com/v1.0/users/test-user")
+	require.NoError(t, err)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	nativeReq, err := adapter.ConvertToNativeRequest(context.Background(), request)
+	require.NoError(t, err)
+	assert.NotNil(t, nativeReq)
+
+	tracer, ok := tracerProvider.tracers[adapter.observabilityOptions.GetTracerInstrumentationName()]
+	require.True(t, ok, "tracer should be created")
+	require.NotEmpty(t, tracer.spans, "spans should be recorded")
+
+	var targetSpan *recordingSpan
+	for _, s := range tracer.spans {
+		if s.name == "getRequestFromRequestInformation" {
+			targetSpan = s
+			break
+		}
+	}
+	require.NotNil(t, targetSpan, "getRequestFromRequestInformation span should exist")
+
+	var serverAddress, urlScheme string
+	for _, attr := range targetSpan.attributes {
+		if attr.Key == "server.address" {
+			serverAddress = attr.Value.AsString()
+		}
+		if attr.Key == "url.scheme" {
+			urlScheme = attr.Value.AsString()
+		}
+	}
+
+	assert.Equal(t, "graph.microsoft.com", serverAddress, "server.address must be the target host")
+	assert.Equal(t, "https", urlScheme, "url.scheme must be the URI scheme")
+}
+
+func TestNetHttpRequestAdapter_SpanAttributes_VariedEndpoints(t *testing.T) {
+	testCases := []struct {
+		name           string
+		rawURL         string
+		expectedHost   string
+		expectedScheme string
+	}{
+		{
+			name:           "custom port http",
+			rawURL:         "http://localhost:8080/api/items",
+			expectedHost:   "localhost",
+			expectedScheme: "http",
+		},
+		{
+			name:           "custom port https",
+			rawURL:         "https://api.contoso.com:8443/v1/resource",
+			expectedHost:   "api.contoso.com",
+			expectedScheme: "https",
+		},
+		{
+			name:           "ipv4 address endpoint",
+			rawURL:         "http://127.0.0.1:5000/healthz",
+			expectedHost:   "127.0.0.1",
+			expectedScheme: "http",
+		},
+		{
+			name:           "subdomain https",
+			rawURL:         "https://api.subdomain.example.com",
+			expectedHost:   "api.subdomain.example.com",
+			expectedScheme: "https",
+		},
+		{
+			name:           "ipv6 endpoint with custom port",
+			rawURL:         "http://[::1]:8080/healthz",
+			expectedHost:   "::1",
+			expectedScheme: "http",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tracerProvider := newRecordingTracerProvider()
+			prevProvider := otel.GetTracerProvider()
+			otel.SetTracerProvider(tracerProvider)
+			defer otel.SetTracerProvider(prevProvider)
+
+			authProvider := &absauth.AnonymousAuthenticationProvider{}
+			adapter, err := NewNetHttpRequestAdapter(authProvider)
+			require.NoError(t, err)
+
+			uri, err := url.Parse(tc.rawURL)
+			require.NoError(t, err)
+			request := abs.NewRequestInformation()
+			request.SetUri(*uri)
+			request.Method = abs.GET
+
+			_, err = adapter.ConvertToNativeRequest(context.Background(), request)
+			require.NoError(t, err)
+
+			tracer, ok := tracerProvider.tracers[adapter.observabilityOptions.GetTracerInstrumentationName()]
+			require.True(t, ok)
+			require.NotEmpty(t, tracer.spans)
+
+			var targetSpan *recordingSpan
+			for _, s := range tracer.spans {
+				if s.name == "getRequestFromRequestInformation" {
+					targetSpan = s
+					break
+				}
+			}
+			require.NotNil(t, targetSpan)
+
+			var serverAddress, urlScheme string
+			for _, attr := range targetSpan.attributes {
+				if attr.Key == "server.address" {
+					serverAddress = attr.Value.AsString()
+				}
+				if attr.Key == "url.scheme" {
+					urlScheme = attr.Value.AsString()
+				}
+			}
+
+			assert.Equal(t, tc.expectedHost, serverAddress)
+			assert.Equal(t, tc.expectedScheme, urlScheme)
+		})
+	}
+}
 
 func TestShouldReturnNil(t *testing.T) {
 	adapter := &NetHttpRequestAdapter{}
