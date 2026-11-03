@@ -281,8 +281,8 @@ func (a *NetHttpRequestAdapter) getRequestFromRequestInformation(ctx context.Con
 		return nil, err
 	}
 	spanForAttributes.SetAttributes(
-		serverAddressAttribute.String(uri.Scheme),
-		urlSchemeAttribute.String(uri.Host),
+		serverAddressAttribute.String(uri.Hostname()),
+		urlSchemeAttribute.String(uri.Scheme),
 	)
 
 	if a.observabilityOptions.IncludeEUIIAttributes {
