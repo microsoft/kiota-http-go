@@ -208,12 +208,16 @@ func (middleware RetryHandler) isRetriableRequest(req *nethttp.Request) bool {
 }
 
 func (middleware RetryHandler) getRetryDelay(req *nethttp.Request, resp *nethttp.Response, options retryHandlerOptionsInt, executionCount int) time.Duration {
+	maxDelay := time.Duration(absoluteMaxDelaySeconds) * time.Second
 	var delay time.Duration
 	retryAfter := resp.Header.Get(retryAfterHeader)
 	if retryAfter != "" {
 		retryAfterDelay, err := strconv.ParseFloat(retryAfter, 64)
 		if err == nil {
 			if !math.IsNaN(retryAfterDelay) && !math.IsInf(retryAfterDelay, 0) && retryAfterDelay >= 0 {
+				if retryAfterDelay > float64(absoluteMaxDelaySeconds) {
+					retryAfterDelay = float64(absoluteMaxDelaySeconds)
+				}
 				delay = time.Duration(retryAfterDelay * float64(time.Second))
 			} else {
 				delay = exponentialBackOffDelay(options.GetDelaySeconds(), executionCount)
@@ -225,11 +229,14 @@ func (middleware RetryHandler) getRetryDelay(req *nethttp.Request, resp *nethttp
 				t, err = time.Parse(time.RFC1123, retryAfter)
 			}
 			if err == nil {
-				diff := t.Sub(time.Now())
-				if diff < 0 {
-					diff = 0
+				now := time.Now()
+				if t.Before(now) {
+					delay = 0
+				} else if t.After(now.Add(maxDelay)) {
+					delay = maxDelay
+				} else {
+					delay = t.Sub(now)
 				}
-				delay = diff
 			} else {
 				delay = exponentialBackOffDelay(options.GetDelaySeconds(), executionCount)
 			}
@@ -237,7 +244,6 @@ func (middleware RetryHandler) getRetryDelay(req *nethttp.Request, resp *nethttp
 	} else {
 		delay = exponentialBackOffDelay(options.GetDelaySeconds(), executionCount)
 	}
-	maxDelay := time.Duration(absoluteMaxDelaySeconds) * time.Second
 	if delay > maxDelay {
 		delay = maxDelay
 	}

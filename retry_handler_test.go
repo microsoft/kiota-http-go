@@ -445,12 +445,22 @@ func TestRetryHandler_GetRetryDelay_CapsAtAbsoluteMaxDelay(t *testing.T) {
 	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
 	require.NoError(t, err)
 
-	respHuge := &nethttp.Response{
-		StatusCode: 429,
-		Header:     nethttp.Header{"Retry-After": []string{"86400"}},
+	testCases := []string{
+		"86400",
+		"10000000000",
+		"100000000000000",
+		time.Now().Add(100000 * time.Hour).UTC().Format(time.RFC1123),
 	}
-	delay := handler.getRetryDelay(req, respHuge, opt, 1)
-	assert.Equal(t, time.Duration(absoluteMaxDelaySeconds)*time.Second, delay)
+
+	expectedMaxDelay := time.Duration(absoluteMaxDelaySeconds) * time.Second
+	for _, retryAfterVal := range testCases {
+		resp := &nethttp.Response{
+			StatusCode: 429,
+			Header:     nethttp.Header{"Retry-After": []string{retryAfterVal}},
+		}
+		delay := handler.getRetryDelay(req, resp, opt, 1)
+		assert.Equal(t, expectedMaxDelay, delay, "failed for Retry-After value: %s", retryAfterVal)
+	}
 }
 
 func TestRetryHandler_OptionsNilSafety(t *testing.T) {
