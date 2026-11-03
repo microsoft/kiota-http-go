@@ -106,6 +106,9 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		}
 		return nil, err
 	}
+	if s, ok := req.Body.(io.Seeker); ok {
+		_, _ = s.Seek(0, io.SeekStart)
+	}
 
 	compressedBody, size, err := compressReqBody(unCompressedBody)
 	if err != nil {
@@ -115,6 +118,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		return nil, err
 	}
 
+	req = req.Clone(ctx)
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Body = compressedBody
 	req.ContentLength = int64(size)
@@ -138,7 +142,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		if resp.Body != nil {
 			_ = resp.Body.Close()
 		}
-		delete(req.Header, "Content-Encoding")
+		req.Header.Del("Content-Encoding")
 		req.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
 		req.ContentLength = unCompressedContentLength
 		req.GetBody = func() (io.ReadCloser, error) {
