@@ -505,19 +505,19 @@ func TestNetHttpRequestAdapter_SpanAttributes_VariedEndpoints(t *testing.T) {
 		{
 			name:           "custom port http",
 			rawURL:         "http://localhost:8080/api/items",
-			expectedHost:   "localhost:8080",
+			expectedHost:   "localhost",
 			expectedScheme: "http",
 		},
 		{
 			name:           "custom port https",
 			rawURL:         "https://api.contoso.com:8443/v1/resource",
-			expectedHost:   "api.contoso.com:8443",
+			expectedHost:   "api.contoso.com",
 			expectedScheme: "https",
 		},
 		{
 			name:           "ipv4 address endpoint",
 			rawURL:         "http://127.0.0.1:5000/healthz",
-			expectedHost:   "127.0.0.1:5000",
+			expectedHost:   "127.0.0.1",
 			expectedScheme: "http",
 		},
 		{
@@ -525,6 +525,12 @@ func TestNetHttpRequestAdapter_SpanAttributes_VariedEndpoints(t *testing.T) {
 			rawURL:         "https://api.subdomain.example.com",
 			expectedHost:   "api.subdomain.example.com",
 			expectedScheme: "https",
+		},
+		{
+			name:           "ipv6 endpoint with custom port",
+			rawURL:         "http://[::1]:8080/healthz",
+			expectedHost:   "::1",
+			expectedScheme: "http",
 		},
 	}
 
