@@ -3,6 +3,7 @@ package nethttplibrary
 import (
 	"context"
 	"github.com/microsoft/kiota-abstractions-go/serialization"
+	"go.opentelemetry.io/otel"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"net/url"
@@ -446,4 +447,49 @@ func TestNetHttpRequestAdapterCustomFactoriesAndBackingStore(t *testing.T) {
 	assert.NotNil(t, adapter.GetSerializationWriterFactory())
 }
 
+func TestNetHttpRequestAdapter_SpanAttributes_ServerAddressAndUrlScheme(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
 
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	require.NoError(t, err)
+
+	uri, err := url.Parse("https://graph.microsoft.com/v1.0/users/test-user")
+	require.NoError(t, err)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	nativeReq, err := adapter.ConvertToNativeRequest(context.Background(), request)
+	require.NoError(t, err)
+	assert.NotNil(t, nativeReq)
+
+	tracer, ok := tracerProvider.tracers[adapter.observabilityOptions.GetTracerInstrumentationName()]
+	require.True(t, ok, "tracer should be created")
+	require.NotEmpty(t, tracer.spans, "spans should be recorded")
+
+	var targetSpan *recordingSpan
+	for _, s := range tracer.spans {
+		if s.name == "getRequestFromRequestInformation" {
+			targetSpan = s
+			break
+		}
+	}
+	require.NotNil(t, targetSpan, "getRequestFromRequestInformation span should exist")
+
+	var serverAddress, urlScheme string
+	for _, attr := range targetSpan.attributes {
+		if attr.Key == "server.address" {
+			serverAddress = attr.Value.AsString()
+		}
+		if attr.Key == "url.scheme" {
+			urlScheme = attr.Value.AsString()
+		}
+	}
+
+	assert.Equal(t, "graph.microsoft.com", serverAddress, "server.address must be the target host")
+	assert.Equal(t, "https", urlScheme, "url.scheme must be the URI scheme")
+}
