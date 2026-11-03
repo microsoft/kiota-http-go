@@ -201,3 +201,53 @@ func TestDefaultPipelinePostRetryWithObservability(t *testing.T) {
 	}
 	assert.Equal(t, 2, attempts)
 }
+
+func TestDefaultPipelinePostRedirectWithObservability(t *testing.T) {
+	postPayload := []byte("default pipeline post request body with 307 redirect and observability")
+	attempts := 0
+
+	var testServer *httptest.Server
+	testServer = httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		attempts++
+		assert.Equal(t, nethttp.MethodPost, req.Method)
+		assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"), "attempt %d expected Content-Encoding: gzip", attempts)
+
+		gzipReader, err := gzip.NewReader(req.Body)
+		assert.NoError(t, err, "attempt %d body should be valid gzip", attempts)
+		if err == nil {
+			decompressed, readErr := io.ReadAll(gzipReader)
+			assert.NoError(t, readErr)
+			_ = gzipReader.Close()
+			assert.Equal(t, postPayload, decompressed, "attempt %d payload mismatch", attempts)
+		}
+
+		if attempts == 1 {
+			res.Header().Set("Location", testServer.URL+"/redirected")
+			res.WriteHeader(nethttp.StatusTemporaryRedirect)
+			return
+		}
+
+		res.WriteHeader(nethttp.StatusOK)
+		_, _ = res.Write([]byte("ok"))
+	}))
+	defer testServer.Close()
+
+	client := GetDefaultClient()
+	req, err := nethttp.NewRequest(nethttp.MethodPost, testServer.URL, bytes.NewReader(postPayload))
+	assert.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), obsOptions.GetKey(), obsOptions)
+	req = req.WithContext(ctx)
+
+	resp, err := client.Do(req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	if resp != nil {
+		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}
+	assert.Equal(t, 2, attempts)
+}
