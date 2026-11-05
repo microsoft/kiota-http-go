@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"context"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"testing"
@@ -81,5 +82,27 @@ func TestParametersNameDecodingHandlerNilRequest(t *testing.T) {
 		resp, err := handler.Intercept(newNoopPipeline(), 0, nil)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
+	})
+}
+
+func TestParametersNameDecodingOptionsNilSafety(t *testing.T) {
+	var nilOpts *ParametersNameDecodingOptions
+	assert.False(t, nilOpts.GetEnable())
+	assert.Nil(t, nilOpts.GetParametersToDecode())
+}
+
+func TestParametersNameDecodingHandlerTypedNilOptionInContext(t *testing.T) {
+	handler := NewParametersNameDecodingHandler()
+	req, err := nethttp.NewRequest("GET", "https://example.com/test?%24top=10", nil)
+	assert.NoError(t, err)
+
+	var nilOpt *ParametersNameDecodingOptions
+	ctx := context.WithValue(req.Context(), parametersNameDecodingKeyValue, nilOpt)
+	req = req.WithContext(ctx)
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
 	})
 }

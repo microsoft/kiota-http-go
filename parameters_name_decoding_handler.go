@@ -3,12 +3,14 @@ package nethttplibrary
 import (
 	"errors"
 	nethttp "net/http"
+	"reflect"
 	"strconv"
 	"strings"
 
 	abs "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ParametersNameDecodingOptions defines the options for the ParametersNameDecodingHandler
@@ -54,11 +56,17 @@ func (options *ParametersNameDecodingOptions) GetKey() abs.RequestOptionKey {
 
 // GetEnable returns the enable value from the option
 func (options *ParametersNameDecodingOptions) GetEnable() bool {
+	if options == nil {
+		return false
+	}
 	return options.Enable
 }
 
 // GetParametersToDecode returns the parametersToDecode value from the option
 func (options *ParametersNameDecodingOptions) GetParametersToDecode() []byte {
+	if options == nil {
+		return nil
+	}
 	return options.ParametersToDecode
 }
 
@@ -71,13 +79,14 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 		return pipeline.Next(req, middlewareIndex)
 	}
 	reqOption, ok := req.Context().Value(parametersNameDecodingKeyValue).(parametersNameDecodingOptionsInt)
-	if !ok || reqOption == nil {
+	if !ok || reqOption == nil || (reflect.ValueOf(reqOption).Kind() == reflect.Ptr && reflect.ValueOf(reqOption).IsNil()) {
 		reqOption = &handler.options
 	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)
 	ctx := req.Context()
+	var span trace.Span
 	if obsOptions != nil {
-		ctx, span := otel.GetTracerProvider().Tracer(obsOptions.GetTracerInstrumentationName()).Start(ctx, "ParametersNameDecodingHandler_Intercept")
+		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetTracerInstrumentationName()).Start(ctx, "ParametersNameDecodingHandler_Intercept")
 		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.parameters_name_decoding.enable", reqOption.GetEnable()))
 		req = req.WithContext(ctx)
 		defer span.End()
@@ -87,7 +96,11 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 		strings.Contains(req.URL.RawQuery, "%") {
 		req.URL.RawQuery = decodeQueryParameters(req.URL.RawQuery, reqOption.GetParametersToDecode())
 	}
-	return pipeline.Next(req, middlewareIndex)
+	res, err := pipeline.Next(req, middlewareIndex)
+	if err != nil && span != nil {
+		span.RecordError(err)
+	}
+	return res, err
 }
 
 func decodeQueryParameters(originalRawQuery string, parametersToDecode []byte) string {
