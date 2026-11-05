@@ -91,8 +91,8 @@ func TestUrlReplaceOptionsNilSafety(t *testing.T) {
 }
 
 func TestUrlReplaceHandlerTypedNilOptionInContext(t *testing.T) {
-	handler := NewUrlReplaceHandler(true, nil)
-	req, err := nethttp.NewRequest("GET", "https://example.com/test", nil)
+	handler := NewUrlReplaceHandler(true, map[string]string{"/users/token-to-replace": "/me"})
+	req, err := nethttp.NewRequest("GET", "https://example.com/users/token-to-replace", nil)
 	assert.NoError(t, err)
 
 	var nilOpt *UrlReplaceOptions
@@ -110,5 +110,7 @@ func TestUrlReplaceHandlerTypedNilOptionInContext(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+		assert.NotNil(t, pipeline.receivedRequest)
+		assert.Equal(t, "/me", pipeline.receivedRequest.URL.Path)
 	})
 }

@@ -111,5 +111,7 @@ func TestParametersNameDecodingHandlerTypedNilOptionInContext(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+		assert.NotNil(t, pipeline.receivedRequest)
+		assert.Equal(t, "https://example.com/test?$top=10", pipeline.receivedRequest.URL.String())
 	})
 }
