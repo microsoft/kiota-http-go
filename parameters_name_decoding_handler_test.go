@@ -2,11 +2,14 @@ package nethttplibrary
 
 import (
 	"context"
+	"errors"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
 )
 
 func TestItDecodesQueryParameterNames(t *testing.T) {
@@ -114,4 +117,35 @@ func TestParametersNameDecodingHandlerTypedNilOptionInContext(t *testing.T) {
 		assert.NotNil(t, pipeline.receivedRequest)
 		assert.Equal(t, "https://example.com/test?$top=10", pipeline.receivedRequest.URL.String())
 	})
+}
+
+func TestParametersNameDecodingHandlerDownstreamPipelineErrorBubblesUpWithoutDuplicateRecording(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
+
+	handler := NewParametersNameDecodingHandler()
+	expectedErr := errors.New("downstream network error")
+	pipeline := &stubPipeline{err: expectedErr}
+
+	req, err := nethttp.NewRequest("GET", "https://example.com/test", nil)
+	require.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), observabilityOptionsKeyValue, obsOptions)
+	req = req.WithContext(ctx)
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.ErrorIs(t, err, expectedErr)
+	assert.Nil(t, resp)
+
+	tracer, ok := tracerProvider.tracers[obsOptions.GetTracerInstrumentationName()]
+	require.True(t, ok)
+	require.NotEmpty(t, tracer.spans)
+
+	interceptSpan := tracer.spans[0]
+	assert.Equal(t, "ParametersNameDecodingHandler_Intercept", interceptSpan.name)
+	assert.True(t, interceptSpan.ended)
+	assert.Empty(t, interceptSpan.recordedErrors, "downstream pipeline errors should bubble up without duplicate recording on handler span")
 }

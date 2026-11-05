@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"context"
+	"errors"
 	"io"
 	nethttp "net/http"
 	httptest "net/http/httptest"
@@ -653,4 +654,35 @@ func TestRedirectHandler_RecordsErrorOnMalformedLocation(t *testing.T) {
 	assert.Equal(t, "RedirectHandler_Intercept", interceptSpan.name)
 	assert.True(t, interceptSpan.ended)
 	require.NotEmpty(t, interceptSpan.recordedErrors, "internal redirect error should be recorded on intercept span")
+}
+
+func TestRedirectHandler_DownstreamPipelineErrorBubblesUpWithoutDuplicateRecording(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
+
+	handler := NewRedirectHandler()
+	expectedErr := errors.New("downstream connection reset")
+	pipeline := &stubPipeline{err: expectedErr}
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/initial", nil)
+	require.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), observabilityOptionsKeyValue, obsOptions)
+	req = req.WithContext(ctx)
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.ErrorIs(t, err, expectedErr)
+	assert.Nil(t, resp)
+
+	tracer, ok := tracerProvider.tracers[obsOptions.GetTracerInstrumentationName()]
+	require.True(t, ok)
+	require.NotEmpty(t, tracer.spans)
+
+	interceptSpan := tracer.spans[0]
+	assert.Equal(t, "RedirectHandler_Intercept", interceptSpan.name)
+	assert.True(t, interceptSpan.ended)
+	assert.Empty(t, interceptSpan.recordedErrors, "downstream pipeline errors should bubble up without duplicate recording on handler span")
 }
