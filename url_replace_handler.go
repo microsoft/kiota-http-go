@@ -7,6 +7,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"net/http"
+	"reflect"
 	"strings"
 )
 
@@ -48,11 +49,17 @@ func (u *UrlReplaceOptions) GetKey() abstractions.RequestOptionKey {
 
 // GetReplacementPairs reads ReplacementPairs settings from UrlReplaceOptions
 func (u *UrlReplaceOptions) GetReplacementPairs() map[string]string {
+	if u == nil {
+		return nil
+	}
 	return u.ReplacementPairs
 }
 
 // IsEnabled reads Enabled setting from UrlReplaceOptions
 func (u *UrlReplaceOptions) IsEnabled() bool {
+	if u == nil {
+		return false
+	}
 	return u.Enabled
 }
 
@@ -73,7 +80,7 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 	}
 
 	reqOption, ok := req.Context().Value(urlReplaceOptionKey).(urlReplaceOptionsInt)
-	if !ok {
+	if !ok || reqOption == nil || (reflect.ValueOf(reqOption).Kind() == reflect.Ptr && reflect.ValueOf(reqOption).IsNil()) {
 		reqOption = &c.options
 	}
 
