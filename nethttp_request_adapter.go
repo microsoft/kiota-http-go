@@ -226,6 +226,12 @@ func (a *NetHttpRequestAdapter) getResponsePrimaryContentType(response *nethttp.
 }
 
 func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs.RequestInformation) {
+	if requestInfo == nil {
+		return
+	}
+	if requestInfo.PathParameters == nil {
+		requestInfo.PathParameters = make(map[string]string)
+	}
 	requestInfo.PathParameters["baseurl"] = a.GetBaseUrl()
 }
 

@@ -582,3 +582,31 @@ func TestNetHttpRequestAdapter_SpanAttributes_VariedEndpoints(t *testing.T) {
 		})
 	}
 }
+
+func TestNetHttpRequestAdapter_SetBaseUrlForRequestInformation_NilSafe(t *testing.T) {
+	adapter := &NetHttpRequestAdapter{
+		baseUrl: "https://example.com",
+	}
+
+	// 1. requestInfo is nil should be a safe no-op
+	assert.NotPanics(t, func() {
+		adapter.setBaseUrlForRequestInformation(nil)
+	})
+
+	// 2. requestInfo with nil PathParameters should be initialized without panicking
+	reqInfo := &abs.RequestInformation{}
+	assert.Nil(t, reqInfo.PathParameters)
+	assert.NotPanics(t, func() {
+		adapter.setBaseUrlForRequestInformation(reqInfo)
+	})
+	assert.NotNil(t, reqInfo.PathParameters)
+	assert.Equal(t, "https://example.com", reqInfo.PathParameters["baseurl"])
+
+	// 3. nil adapter should also not panic and set empty baseurl
+	var nilAdapter *NetHttpRequestAdapter
+	reqInfo2 := &abs.RequestInformation{}
+	assert.NotPanics(t, func() {
+		nilAdapter.setBaseUrlForRequestInformation(reqInfo2)
+	})
+	assert.Equal(t, "", reqInfo2.PathParameters["baseurl"])
+}
