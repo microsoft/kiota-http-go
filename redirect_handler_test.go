@@ -616,3 +616,41 @@ func TestRedirectHandler_SpanHierarchyAndContextNesting(t *testing.T) {
 	spanInContext := trace.SpanFromContext(redirectReq.Context())
 	assert.Equal(t, redirectSpan, spanInContext, "redirected request context should carry the active redirect span")
 }
+
+func TestRedirectHandler_RecordsErrorOnMalformedLocation(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
+
+	handler := NewRedirectHandler()
+	// Return 302 with unparseable Location header
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: 302,
+			Header: nethttp.Header{
+				"Location": []string{"://bad-url"},
+			},
+		},
+	}
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/initial", nil)
+	require.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), observabilityOptionsKeyValue, obsOptions)
+	req = req.WithContext(ctx)
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.Error(t, err)
+	assert.NotNil(t, resp)
+
+	tracer, ok := tracerProvider.tracers[obsOptions.GetTracerInstrumentationName()]
+	require.True(t, ok, "tracer should be created")
+	require.NotEmpty(t, tracer.spans)
+
+	interceptSpan := tracer.spans[0]
+	assert.Equal(t, "RedirectHandler_Intercept", interceptSpan.name)
+	assert.True(t, interceptSpan.ended)
+	require.NotEmpty(t, interceptSpan.recordedErrors, "internal redirect error should be recorded on intercept span")
+}

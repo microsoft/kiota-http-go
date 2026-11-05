@@ -182,6 +182,12 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 			if errors.Is(err, errRedirectBodyNotReplayable) {
 				return response, nil
 			}
+			if observabilityName != "" {
+				span := trace.SpanFromContext(ctx)
+				if span != nil {
+					span.RecordError(err)
+				}
+			}
 			return response, err
 		}
 		if observabilityName != "" {

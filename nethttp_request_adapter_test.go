@@ -735,7 +735,7 @@ func TestNetHttpRequestAdapter_PurgeAndResponseNilGuards(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, node)
 
-	node, _, err = adapter.getRootParseNode(context.Background(), &nethttp.Response{Body: nil}, nil)
+	node, _, err = adapter.getRootParseNode(context.Background(), &nethttp.Response{ContentLength: -1, Body: nil}, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, node)
 }
