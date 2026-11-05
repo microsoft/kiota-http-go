@@ -79,7 +79,7 @@ func TestItPreservesEncodedCharactersInQueryParameterValues(t *testing.T) {
 func TestParametersNameDecodingHandlerNilRequest(t *testing.T) {
 	handler := NewParametersNameDecodingHandler()
 	assert.NotPanics(t, func() {
-		resp, err := handler.Intercept(newNoopPipeline(), 0, nil)
+		resp, err := handler.Intercept(&stubPipeline{}, 0, nil)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 	})
@@ -100,9 +100,16 @@ func TestParametersNameDecodingHandlerTypedNilOptionInContext(t *testing.T) {
 	ctx := context.WithValue(req.Context(), parametersNameDecodingKeyValue, nilOpt)
 	req = req.WithContext(ctx)
 
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
 	assert.NotPanics(t, func() {
-		resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+		resp, err := handler.Intercept(pipeline, 0, req)
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
+		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
 	})
 }
