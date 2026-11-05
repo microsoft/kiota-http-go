@@ -707,3 +707,35 @@ func TestConvertToNativeRequest_NilGuardsAndBaseUrl(t *testing.T) {
 	assert.NotNil(t, nativeReq)
 	assert.Equal(t, "https://example.com/v1.0", reqWithTemplate.PathParameters["baseurl"])
 }
+
+func TestNetHttpRequestAdapter_PurgeAndResponseNilGuards(t *testing.T) {
+	adapter := &NetHttpRequestAdapter{}
+
+	// 1. purge with nil response or nil body does not panic
+	assert.NotPanics(t, func() {
+		err := adapter.purge(nil)
+		assert.NoError(t, err)
+	})
+	assert.NotPanics(t, func() {
+		err := adapter.purge(&nethttp.Response{Body: nil})
+		assert.NoError(t, err)
+	})
+
+	// 2. shouldReturnNil with nil response returns false
+	assert.False(t, adapter.shouldReturnNil(nil))
+	assert.True(t, adapter.shouldReturnNil(&nethttp.Response{StatusCode: 204}))
+	assert.False(t, adapter.shouldReturnNil(&nethttp.Response{StatusCode: 200}))
+
+	// 3. getResponsePrimaryContentType with nil response returns ""
+	assert.Equal(t, "", adapter.getResponsePrimaryContentType(nil))
+	assert.Equal(t, "", adapter.getResponsePrimaryContentType(&nethttp.Response{Header: nil}))
+
+	// 4. getRootParseNode with nil response or nil body returns nil without panic
+	node, _, err := adapter.getRootParseNode(context.Background(), nil, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, node)
+
+	node, _, err = adapter.getRootParseNode(context.Background(), &nethttp.Response{Body: nil}, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, node)
+}

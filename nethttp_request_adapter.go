@@ -217,7 +217,7 @@ func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, 
 }
 
 func (a *NetHttpRequestAdapter) getResponsePrimaryContentType(response *nethttp.Response) string {
-	if response.Header == nil {
+	if response == nil || response.Header == nil {
 		return ""
 	}
 	rawType := response.Header.Get("Content-Type")
@@ -766,7 +766,7 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "getRootParseNode")
 	defer span.End()
 
-	if response.ContentLength == 0 {
+	if response == nil || response.ContentLength == 0 || response.Body == nil {
 		return nil, ctx, nil
 	}
 
@@ -786,6 +786,9 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	return rootNode, ctx, err
 }
 func (a *NetHttpRequestAdapter) purge(response *nethttp.Response) error {
+	if response == nil || response.Body == nil {
+		return nil
+	}
 	_, _ = io.ReadAll(response.Body) //we don't care about errors comming from reading the body, just trying to purge anything that maybe left
 	err := response.Body.Close()
 	if err != nil {
@@ -794,7 +797,7 @@ func (a *NetHttpRequestAdapter) purge(response *nethttp.Response) error {
 	return nil
 }
 func (a *NetHttpRequestAdapter) shouldReturnNil(response *nethttp.Response) bool {
-	return response.StatusCode == 204
+	return response != nil && response.StatusCode == 204
 }
 
 // ErrorMappingFoundAttributeName is the attribute name used to indicate whether an error code mapping was found.
