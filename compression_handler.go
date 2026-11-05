@@ -94,11 +94,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	}
 
 	if !reqOption.ShouldCompress() || contentRangeBytesIsPresent(req.Header) || contentEncodingIsPresent(req.Header) || req.Body == nil {
-		resp, err := pipeline.Next(req, middlewareIndex)
-		if err != nil && span != nil {
-			span.RecordError(err)
-		}
-		return resp, err
+		return pipeline.Next(req, middlewareIndex)
 	}
 	if span != nil {
 		span.SetAttributes(attribute.Bool("http.request_body_compressed", true))
@@ -132,9 +128,6 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	// Sending request with compressed body
 	resp, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
-		if span != nil {
-			span.RecordError(err)
-		}
 		return nil, err
 	}
 
@@ -149,11 +142,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 				httpResponseStatusCodeAttribute.Int(415))
 		}
 
-		resp, err = pipeline.Next(req, middlewareIndex)
-		if err != nil && span != nil {
-			span.RecordError(err)
-		}
-		return resp, err
+		return pipeline.Next(req, middlewareIndex)
 	}
 
 	return resp, nil
