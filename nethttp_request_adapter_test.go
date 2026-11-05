@@ -610,3 +610,59 @@ func TestNetHttpRequestAdapter_SetBaseUrlForRequestInformation_NilSafe(t *testin
 	})
 	assert.Equal(t, "", reqInfo2.PathParameters["baseurl"])
 }
+
+func TestSendEnum_ResponseHandler_ReturnsRawResult(t *testing.T) {
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.WriteHeader(200)
+	}))
+	defer testServer.Close()
+
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.NoError(t, err)
+
+	uri, err := url.Parse(testServer.URL)
+	assert.NoError(t, err)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	responseHandler := func(response interface{}, errorMappings abs.ErrorMappings) (interface{}, error) {
+		return "CustomEnumValue", nil
+	}
+	handlerOption := abs.NewRequestHandlerOption()
+	handlerOption.SetResponseHandler(responseHandler)
+	request.AddRequestOptions([]abs.RequestOption{handlerOption})
+
+	result, err := adapter.SendEnum(context.Background(), request, nil, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "CustomEnumValue", result)
+}
+
+func TestSendPrimitive_ResponseHandler_ReturnsRawResult(t *testing.T) {
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.WriteHeader(200)
+	}))
+	defer testServer.Close()
+
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.NoError(t, err)
+
+	uri, err := url.Parse(testServer.URL)
+	assert.NoError(t, err)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	responseHandler := func(response interface{}, errorMappings abs.ErrorMappings) (interface{}, error) {
+		return 42, nil
+	}
+	handlerOption := abs.NewRequestHandlerOption()
+	handlerOption.SetResponseHandler(responseHandler)
+	request.AddRequestOptions([]abs.RequestOption{handlerOption})
+
+	result, err := adapter.SendPrimitive(context.Background(), request, "int", nil)
+	assert.NoError(t, err)
+	assert.Equal(t, 42, result)
+}

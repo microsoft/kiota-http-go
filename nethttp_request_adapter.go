@@ -430,7 +430,7 @@ func (a *NetHttpRequestAdapter) SendEnum(ctx context.Context, requestInfo *abs.R
 		if result == nil {
 			return nil, nil
 		}
-		return result.(absser.Parsable), nil
+		return result, nil
 	} else if response != nil {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
@@ -603,7 +603,7 @@ func (a *NetHttpRequestAdapter) SendPrimitive(ctx context.Context, requestInfo *
 		if result == nil {
 			return nil, nil
 		}
-		return result.(absser.Parsable), nil
+		return result, nil
 	} else if response != nil {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
