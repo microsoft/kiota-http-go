@@ -12,6 +12,7 @@ import (
 	abs "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RedirectHandler handles redirect responses and follows them according to the options specified.
@@ -153,7 +154,8 @@ func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex i
 	var observabilityName string
 	if obsOptions != nil {
 		observabilityName = obsOptions.GetTracerInstrumentationName()
-		ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept")
+		var span trace.Span
+		ctx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept")
 		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.redirect.enable", true))
 		defer span.End()
 		req = req.WithContext(ctx)
@@ -183,12 +185,14 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 			return response, err
 		}
 		if observabilityName != "" {
-			ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
+			var span trace.Span
+			var redirectCtx context.Context
+			redirectCtx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
 			span.SetAttributes(attribute.Int("com.microsoft.kiota.handler.redirect.count", redirectCount),
 				httpResponseStatusCodeAttribute.Int(response.StatusCode),
 			)
 			defer span.End()
-			redirectRequest = redirectRequest.WithContext(ctx)
+			redirectRequest = redirectRequest.WithContext(redirectCtx)
 		}
 
 		result, err := pipeline.Next(redirectRequest, middlewareIndex)
