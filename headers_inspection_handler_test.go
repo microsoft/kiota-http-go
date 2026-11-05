@@ -18,11 +18,13 @@ import (
 )
 
 type stubPipeline struct {
-	response *nethttp.Response
-	err      error
+	response        *nethttp.Response
+	err             error
+	receivedRequest *nethttp.Request
 }
 
 func (s *stubPipeline) Next(req *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+	s.receivedRequest = req
 	return s.response, s.err
 }
 
