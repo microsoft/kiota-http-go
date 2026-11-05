@@ -68,7 +68,7 @@ func TestNewUrlReplaceHandlerWithOptions(t *testing.T) {
 func TestUrlReplaceHandlerNilRequest(t *testing.T) {
 	handler := NewUrlReplaceHandler(true, map[string]string{"foo": "bar"})
 	assert.NotPanics(t, func() {
-		resp, err := handler.Intercept(newNoopPipeline(), 0, nil)
+		resp, err := handler.Intercept(&stubPipeline{}, 0, nil)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 	})
@@ -78,7 +78,7 @@ func TestUrlReplaceHandlerNilURL(t *testing.T) {
 	handler := NewUrlReplaceHandler(true, map[string]string{"foo": "bar"})
 	req := &nethttp.Request{}
 	assert.NotPanics(t, func() {
-		resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+		resp, err := handler.Intercept(&stubPipeline{}, 0, req)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 	})
@@ -99,9 +99,16 @@ func TestUrlReplaceHandlerTypedNilOptionInContext(t *testing.T) {
 	ctx := context.WithValue(req.Context(), urlReplaceOptionKey, nilOpt)
 	req = req.WithContext(ctx)
 
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
 	assert.NotPanics(t, func() {
-		resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+		resp, err := handler.Intercept(pipeline, 0, req)
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
+		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
 	})
 }
