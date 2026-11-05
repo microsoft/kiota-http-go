@@ -6,6 +6,7 @@ import (
 	"fmt"
 	nethttp "net/http"
 	"net/url"
+	"reflect"
 	"strings"
 
 	abs "github.com/microsoft/kiota-abstractions-go"
@@ -20,13 +21,16 @@ type RedirectHandler struct {
 	options RedirectHandlerOptions
 }
 
+// DefaultShouldRedirect is the default redirection evaluation function that always allows redirects.
+var DefaultShouldRedirect = func(req *nethttp.Request, res *nethttp.Response) bool {
+	return true
+}
+
 // NewRedirectHandler creates a new redirect handler with the default options.
 func NewRedirectHandler() *RedirectHandler {
 	return NewRedirectHandlerWithOptions(RedirectHandlerOptions{
-		MaxRedirects: defaultMaxRedirects,
-		ShouldRedirect: func(req *nethttp.Request, res *nethttp.Response) bool {
-			return true
-		},
+		MaxRedirects:          defaultMaxRedirects,
+		ShouldRedirect:        DefaultShouldRedirect,
 		ScrubSensitiveHeaders: DefaultScrubSensitiveHeaders,
 	})
 }
@@ -35,6 +39,9 @@ func NewRedirectHandler() *RedirectHandler {
 func NewRedirectHandlerWithOptions(options RedirectHandlerOptions) *RedirectHandler {
 	if options.ScrubSensitiveHeaders == nil {
 		options.ScrubSensitiveHeaders = DefaultScrubSensitiveHeaders
+	}
+	if options.ShouldRedirect == nil {
+		options.ShouldRedirect = DefaultShouldRedirect
 	}
 	return &RedirectHandler{options: options}
 }
@@ -101,6 +108,9 @@ func (options *RedirectHandlerOptions) GetKey() abs.RequestOptionKey {
 
 // GetShouldRedirect returns the redirection evaluation function.
 func (options *RedirectHandlerOptions) GetShouldRedirect() func(req *nethttp.Request, res *nethttp.Response) bool {
+	if options == nil || options.ShouldRedirect == nil {
+		return DefaultShouldRedirect
+	}
 	return options.ShouldRedirect
 }
 
@@ -136,6 +146,9 @@ var errRedirectBodyNotReplayable = errors.New("redirect request body cannot be r
 
 // Intercept implements the interface and evaluates whether to follow a redirect response.
 func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)
 	ctx := req.Context()
 	var span trace.Span
@@ -149,10 +162,13 @@ func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex i
 	}
 	response, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return response, err
 	}
 	reqOption, ok := req.Context().Value(redirectKeyValue).(redirectHandlerOptionsInt)
-	if !ok {
+	if !ok || reqOption == nil || (reflect.ValueOf(reqOption).Kind() == reflect.Ptr && reflect.ValueOf(reqOption).IsNil()) {
 		reqOption = &middleware.options
 	}
 	return middleware.redirectRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, observabilityName)

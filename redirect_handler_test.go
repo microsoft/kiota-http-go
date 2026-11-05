@@ -529,3 +529,22 @@ func TestRedirectMissingLocationReturnsError(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestRedirectHandlerNilRequest(t *testing.T) {
+	handler := NewRedirectHandler()
+	resp, err := handler.Intercept(nil, 0, nil)
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Contains(t, err.Error(), "req cannot be nil")
+}
+
+func TestRedirectHandlerOptionsNilSafety(t *testing.T) {
+	var nilOpts *RedirectHandlerOptions
+	assert.NotNil(t, nilOpts.GetShouldRedirect())
+	assert.True(t, nilOpts.GetShouldRedirect()(nil, nil))
+	assert.Equal(t, defaultMaxRedirects, nilOpts.GetMaxRedirect())
+	assert.NotNil(t, nilOpts.GetScrubSensitiveHeaders())
+
+	emptyOpts := &RedirectHandlerOptions{}
+	assert.NotNil(t, emptyOpts.GetShouldRedirect())
+	assert.True(t, emptyOpts.GetShouldRedirect()(nil, nil))
+}
