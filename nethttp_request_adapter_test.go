@@ -739,3 +739,36 @@ func TestNetHttpRequestAdapter_PurgeAndResponseNilGuards(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, node)
 }
+
+func TestRetryCAEResponseIfRequired_NilAndMalformedGuards(t *testing.T) {
+	adapter := &NetHttpRequestAdapter{}
+
+	// 1. nil response should not panic and return nil
+	res, err := adapter.retryCAEResponseIfRequired(context.Background(), nil, nil, "", nil)
+	assert.NoError(t, err)
+	assert.Nil(t, res)
+
+	// 2. malformed claims parameter without quotes should not panic with index out of range
+	malformedHeader := nethttp.Header{}
+	malformedHeader.Set("WWW-Authenticate", "Bearer claims=malformed_no_quotes")
+	res401 := &nethttp.Response{
+		StatusCode: 401,
+		Header:     malformedHeader,
+	}
+	assert.NotPanics(t, func() {
+		res, err = adapter.retryCAEResponseIfRequired(context.Background(), res401, nil, "", nil)
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, res401, res)
+
+	// 3. 401 response with nil header should not panic
+	resNilHeader := &nethttp.Response{
+		StatusCode: 401,
+		Header:     nil,
+	}
+	assert.NotPanics(t, func() {
+		res, err = adapter.retryCAEResponseIfRequired(context.Background(), resNilHeader, nil, "", nil)
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, resNilHeader, res)
+}

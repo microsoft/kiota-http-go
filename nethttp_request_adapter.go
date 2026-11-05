@@ -192,24 +192,31 @@ const AuthenticateChallengedEventKey = "com.microsoft.kiota.authenticate_challen
 func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, response *nethttp.Response, requestInfo *abs.RequestInformation, claims string, spanForAttributes trace.Span) (*nethttp.Response, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "retryCAEResponseIfRequired")
 	defer span.End()
-	if response.StatusCode == 401 &&
+	if response != nil && response.StatusCode == 401 &&
 		claims == "" { //avoid infinite loop, we only retry once
-		authenticateHeaderVal := response.Header.Get("WWW-Authenticate")
-		if authenticateHeaderVal != "" && reBearer.Match([]byte(authenticateHeaderVal)) {
-			span.AddEvent(AuthenticateChallengedEventKey)
-			spanForAttributes.SetAttributes(httpRequestResendCountAttribute.Int(1))
-			responseClaims := ""
-			parametersRaw := string(reBearer.ReplaceAll([]byte(authenticateHeaderVal), []byte("")))
-			parameters := strings.Split(parametersRaw, ",")
-			for _, parameter := range parameters {
-				if strings.HasPrefix(strings.Trim(parameter, " "), claimsKey) {
-					responseClaims = reClaims.FindStringSubmatch(parameter)[1]
-					break
+		if response.Header != nil {
+			authenticateHeaderVal := response.Header.Get("WWW-Authenticate")
+			if authenticateHeaderVal != "" && reBearer.Match([]byte(authenticateHeaderVal)) {
+				span.AddEvent(AuthenticateChallengedEventKey)
+				if spanForAttributes != nil {
+					spanForAttributes.SetAttributes(httpRequestResendCountAttribute.Int(1))
 				}
-			}
-			if responseClaims != "" {
-				defer a.purge(response)
-				return a.getHttpResponseMessage(ctx, requestInfo, responseClaims, spanForAttributes)
+				responseClaims := ""
+				parametersRaw := string(reBearer.ReplaceAll([]byte(authenticateHeaderVal), []byte("")))
+				parameters := strings.Split(parametersRaw, ",")
+				for _, parameter := range parameters {
+					if strings.HasPrefix(strings.Trim(parameter, " "), claimsKey) {
+						matches := reClaims.FindStringSubmatch(parameter)
+						if len(matches) > 1 {
+							responseClaims = matches[1]
+							break
+						}
+					}
+				}
+				if responseClaims != "" {
+					defer a.purge(response)
+					return a.getHttpResponseMessage(ctx, requestInfo, responseClaims, spanForAttributes)
+				}
 			}
 		}
 	}
