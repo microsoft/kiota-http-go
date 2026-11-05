@@ -666,3 +666,44 @@ func TestSendPrimitive_ResponseHandler_ReturnsRawResult(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 42, result)
 }
+
+func TestConvertToNativeRequest_NilGuardsAndBaseUrl(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. nil adapter returns error
+	var nilAdapter *NetHttpRequestAdapter
+	reqInfo := abs.NewRequestInformation()
+	req, err := nilAdapter.ConvertToNativeRequest(ctx, reqInfo)
+	assert.Error(t, err)
+	assert.Nil(t, req)
+	assert.Contains(t, err.Error(), "adapter cannot be nil")
+
+	// 2. nil requestInfo returns error
+	adapter := &NetHttpRequestAdapter{
+		authenticationProvider: &absauth.AnonymousAuthenticationProvider{},
+	}
+	req, err = adapter.ConvertToNativeRequest(ctx, nil)
+	assert.Error(t, err)
+	assert.Nil(t, req)
+	assert.Contains(t, err.Error(), "requestInfo cannot be nil")
+
+	// 3. nil authenticationProvider returns error
+	adapterNoAuth := &NetHttpRequestAdapter{}
+	req, err = adapterNoAuth.ConvertToNativeRequest(ctx, reqInfo)
+	assert.Error(t, err)
+	assert.Nil(t, req)
+	assert.Contains(t, err.Error(), "authenticationProvider cannot be nil")
+
+	// 4. sets base url on requestInfo
+	adapterWithBase := &NetHttpRequestAdapter{
+		authenticationProvider: &absauth.AnonymousAuthenticationProvider{},
+		baseUrl:                "https://example.com/v1.0",
+	}
+	reqWithTemplate := abs.NewRequestInformation()
+	reqWithTemplate.UrlTemplate = "{+baseurl}/me"
+	reqWithTemplate.Method = abs.GET
+	nativeReq, err := adapterWithBase.ConvertToNativeRequest(ctx, reqWithTemplate)
+	assert.NoError(t, err)
+	assert.NotNil(t, nativeReq)
+	assert.Equal(t, "https://example.com/v1.0", reqWithTemplate.PathParameters["baseurl"])
+}

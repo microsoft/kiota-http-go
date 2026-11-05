@@ -263,6 +263,16 @@ func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo 
 
 // ConvertToNativeRequest converts the given RequestInformation into a native HTTP request.
 func (a *NetHttpRequestAdapter) ConvertToNativeRequest(context context.Context, requestInfo *abs.RequestInformation) (any, error) {
+	if a == nil {
+		return nil, errors.New("adapter cannot be nil")
+	}
+	if requestInfo == nil {
+		return nil, errors.New("requestInfo cannot be nil")
+	}
+	a.setBaseUrlForRequestInformation(requestInfo)
+	if a.authenticationProvider == nil {
+		return nil, errors.New("authenticationProvider cannot be nil")
+	}
 	err := a.authenticationProvider.AuthenticateRequest(context, requestInfo, nil)
 	if err != nil {
 		return nil, err
