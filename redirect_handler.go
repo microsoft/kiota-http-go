@@ -117,8 +117,8 @@ func (options *RedirectHandlerOptions) GetMaxRedirect() int {
 
 // GetScrubSensitiveHeaders returns the header scrubbing function.
 func (options *RedirectHandlerOptions) GetScrubSensitiveHeaders() ScrubSensitiveHeaders {
-	if options == nil || options.ScrubSensitiveHeaders == nil {
-		return DefaultScrubSensitiveHeaders
+	if options == nil {
+		return nil
 	}
 	return options.ScrubSensitiveHeaders
 }
@@ -136,6 +136,9 @@ var errRedirectBodyNotReplayable = errors.New("redirect request body cannot be r
 
 // Intercept implements the interface and evaluates whether to follow a redirect response.
 func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *nethttp.Request) (*nethttp.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)
 	ctx := req.Context()
 	var span trace.Span
@@ -152,7 +155,7 @@ func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex i
 		return response, err
 	}
 	reqOption, ok := req.Context().Value(redirectKeyValue).(redirectHandlerOptionsInt)
-	if !ok {
+	if !ok || isNil(reqOption) {
 		reqOption = &middleware.options
 	}
 	return middleware.redirectRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, observabilityName)
@@ -170,6 +173,9 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 				return response, nil
 			}
 			return response, err
+		}
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
 		}
 		if observabilityName != "" {
 			ctx, span := otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
@@ -243,9 +249,15 @@ func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, r
 
 	// Scrub sensitive headers before following the redirect
 	scrubber := middleware.options.GetScrubSensitiveHeaders()
-	if scrubber != nil {
-		scrubber(result, request.URL)
+	if request != nil && request.Context() != nil {
+		if reqOption, ok := request.Context().Value(redirectKeyValue).(redirectHandlerOptionsInt); ok && !isNil(reqOption) && reqOption.GetScrubSensitiveHeaders() != nil {
+			scrubber = reqOption.GetScrubSensitiveHeaders()
+		}
 	}
+	if scrubber == nil {
+		scrubber = DefaultScrubSensitiveHeaders
+	}
+	scrubber(result, request.URL)
 
 	return result, nil
 }

@@ -1,12 +1,16 @@
 package nethttplibrary
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"go.opentelemetry.io/otel"
+	"io"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"strconv"
+	"strings"
 	testing "testing"
 	"time"
 
@@ -343,6 +347,58 @@ func TestRetryHandlerTerminalRetryErrorRecordedOnSpan(t *testing.T) {
 	assert.Contains(t, interceptSpan.recordedErrors, expectedErr, "recorded errors should contain terminal retry error")
 }
 
+func TestRetryHandlerNilOption(t *testing.T) {
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	var nilOpt *RetryHandlerOptions
+	ctx := context.WithValue(req.Context(), retryKeyValue, nilOpt)
+	req = req.WithContext(ctx)
+
+	mockResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	pipeline := &stubPipeline{response: mockResp}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+}
+
+func TestRetryHandlerClosesResponseBodyOnRetry(t *testing.T) {
+	handler := NewRetryHandler()
+	bodyTracker := &trackingReadCloser{Reader: strings.NewReader("temporary error")}
+	resp503 := &nethttp.Response{
+		StatusCode: 503,
+		Header:     nethttp.Header{retryAfterHeader: []string{"0"}},
+		Body:       bodyTracker,
+	}
+	resp200 := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/data", nil)
+	assert.NoError(t, err)
+
+	callCount := 0
+	pipeline := &dynamicPipeline{
+		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return resp503, nil
+			}
+			return resp200, nil
+		},
+	}
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	assert.True(t, bodyTracker.closed, "retried response body should be closed")
+}
+
 func TestRetryHandler_GetRetryDelay_FractionalSeconds(t *testing.T) {
 	handler := NewRetryHandler()
 	opt := &RetryHandlerOptions{DelaySeconds: 3, MaxRetries: 3}
@@ -484,4 +540,128 @@ func TestRetryHandler_OptionsNilSafety(t *testing.T) {
 	}
 	assert.Equal(t, absoluteMaxDelaySeconds, optBounds.GetDelaySeconds())
 	assert.Equal(t, absoluteMaxRetries, optBounds.GetMaxRetries())
+}
+
+type seekableReadCloser struct {
+	*bytes.Reader
+}
+
+func (s *seekableReadCloser) Close() error {
+	return nil
+}
+
+func TestRetrySeekablePostBodyWithoutGetBody_NoDoubleCompression(t *testing.T) {
+	postPayload := []byte("seekable body without getBody retry double-compression regression test")
+	attempts := 0
+
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		attempts++
+		assert.Equal(t, nethttp.MethodPost, req.Method)
+		assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"), "attempt %d expected Content-Encoding: gzip", attempts)
+
+		gzipReader, err := gzip.NewReader(req.Body)
+		assert.NoError(t, err, "attempt %d body should be valid gzip", attempts)
+		if err == nil {
+			decompressed, readErr := io.ReadAll(gzipReader)
+			assert.NoError(t, readErr)
+			_ = gzipReader.Close()
+			assert.Equal(t, postPayload, decompressed, "attempt %d payload mismatch - double compressed if corrupt", attempts)
+		}
+
+		if attempts == 1 {
+			res.Header().Set("Retry-After", "0")
+			res.WriteHeader(nethttp.StatusTooManyRequests)
+			return
+		}
+
+		res.WriteHeader(nethttp.StatusOK)
+		_, _ = res.Write([]byte("ok"))
+	}))
+	defer testServer.Close()
+
+	client := GetDefaultClient()
+	req, err := nethttp.NewRequest(nethttp.MethodPost, testServer.URL, nil)
+	require.NoError(t, err)
+	req.Body = &seekableReadCloser{Reader: bytes.NewReader(postPayload)}
+	req.ContentLength = int64(len(postPayload))
+	req.GetBody = nil // explicitly nil GetBody to test seekable retry without GetBody
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	if resp != nil {
+		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}
+	assert.Equal(t, 2, attempts)
+}
+
+func TestRetryHandler_AbortWhenGetBodyFails(t *testing.T) {
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodPost, "https://example.com/item", strings.NewReader("hello"))
+	require.NoError(t, err)
+
+	expectedErr := errors.New("simulated getBody failure")
+	req.GetBody = func() (io.ReadCloser, error) {
+		return nil, expectedErr
+	}
+
+	callCount := 0
+	pipeline := &dynamicPipeline{
+		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
+			callCount++
+			return &nethttp.Response{
+				StatusCode: 429,
+				Header:     nethttp.Header{"Retry-After": []string{"0"}},
+				Body:       io.NopCloser(strings.NewReader("rate limited")),
+			}, nil
+		},
+	}
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.ErrorIs(t, err, expectedErr)
+	assert.Nil(t, resp)
+	assert.Equal(t, 1, callCount, "retry must abort on GetBody failure without invoking subsequent attempts")
+}
+
+func TestRetryHandler_CancelDuringDelay_NoBodyLeak(t *testing.T) {
+	handler := NewRetryHandlerWithOptions(RetryHandlerOptions{
+		DelaySeconds: 2,
+		MaxRetries:   2,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, "https://example.com/item", strings.NewReader("hello"))
+	require.NoError(t, err)
+
+	bodyOpened := false
+	bodyClosed := false
+	req.GetBody = func() (io.ReadCloser, error) {
+		bodyOpened = true
+		return &trackingReadCloser{
+			Reader: strings.NewReader("hello"),
+		}, nil
+	}
+
+	pipeline := &dynamicPipeline{
+		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
+			return &nethttp.Response{
+				StatusCode: 429,
+				Header:     nethttp.Header{"Retry-After": []string{"2"}},
+				Body:       io.NopCloser(strings.NewReader("rate limited")),
+			}, nil
+		},
+	}
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, resp)
+	assert.False(t, bodyOpened && !bodyClosed, "replacement body must not be leaked if retry is canceled during backoff delay")
 }

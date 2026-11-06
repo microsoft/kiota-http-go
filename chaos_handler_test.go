@@ -1,6 +1,7 @@
 package nethttplibrary
 
 import (
+	"context"
 	"github.com/stretchr/testify/assert"
 	nethttp "net/http"
 	"net/http/httptest"
@@ -56,6 +57,7 @@ func TestItCreatesANewChaosHandlerWithOptions(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, 400, resp.StatusCode)
 }
+
 
 func TestChaosHandlerNilRequest(t *testing.T) {
 	handler := NewChaosHandler()
@@ -235,7 +237,8 @@ func TestChaosHandlerStatusMapRegexWithFullUrlPreserved(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, 502, resp.StatusCode)
 }
-
+
+
 func TestChaosHandlerStatusMapExactPathWhenFullUrlLacksMethod(t *testing.T) {
 	statusMap := map[string]map[string]int{
 		"https://example.test/items/a+b": {
@@ -268,4 +271,25 @@ func TestChaosHandlerStatusMapExactPathWhenFullUrlLacksMethod(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, respPost)
 	assert.Equal(t, 201, respPost.StatusCode)
+}
+
+func TestChaosHandlerNilOption(t *testing.T) {
+	handler := NewChaosHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	assert.NoError(t, err)
+	var nilOpt *ChaosHandlerOptions
+	ctx := context.WithValue(req.Context(), chaosHandlerKey, nilOpt)
+	req = req.WithContext(ctx)
+
+	mockResp := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	pipeline := &stubPipeline{response: mockResp}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
 }

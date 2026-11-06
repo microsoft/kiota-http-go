@@ -123,6 +123,14 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 		defer span.End()
 		req = req.WithContext(ctx)
 	}
+	var origHeader nethttp.Header
+	if req.Header != nil {
+		origHeader = req.Header.Clone()
+	}
+	origContentLength := req.ContentLength
+	origGetBody := req.GetBody
+	origBody := req.Body
+
 	response, err := pipeline.Next(req, middlewareIndex)
 	if err != nil {
 		if span != nil {
@@ -131,17 +139,17 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 		return response, err
 	}
 	reqOption, ok := req.Context().Value(retryKeyValue).(retryHandlerOptionsInt)
-	if !ok {
+	if !ok || isNil(reqOption) {
 		reqOption = &middleware.options
 	}
-	response, err = middleware.retryRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, 0, observabilityName)
+	response, err = middleware.retryRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, 0, observabilityName, origHeader, origContentLength, origGetBody, origBody)
 	if err != nil && span != nil {
 		span.RecordError(err)
 	}
 	return response, err
 }
 
-func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeline, middlewareIndex int, options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response, executionCount int, cumulativeDelay time.Duration, observabilityName string) (*nethttp.Response, error) {
+func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeline, middlewareIndex int, options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response, executionCount int, cumulativeDelay time.Duration, observabilityName string, origHeader nethttp.Header, origContentLength int64, origGetBody func() (io.ReadCloser, error), origBody io.ReadCloser) (*nethttp.Response, error) {
 	if resp == nil {
 		return nil, errors.New("response cannot be nil")
 	}
@@ -150,16 +158,12 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 		executionCount < options.GetMaxRetries() &&
 		cumulativeDelay < time.Duration(absoluteMaxDelaySeconds)*time.Second &&
 		options.GetShouldRetry()(cumulativeDelay, executionCount, req, resp) {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
 		executionCount++
 		delay := middleware.getRetryDelay(req, resp, options, executionCount)
 		cumulativeDelay += delay
-		req.Header.Set(retryAttemptHeader, strconv.Itoa(executionCount))
-		if req.Body != nil {
-			s, ok := req.Body.(io.Seeker)
-			if ok {
-				s.Seek(0, io.SeekStart)
-			}
-		}
 		var attemptSpan trace.Span
 		if observabilityName != "" {
 			var attemptCtx context.Context
@@ -175,6 +179,7 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 		t := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			// Return without retrying if the context was cancelled.
 			if attemptSpan != nil {
 				attemptSpan.RecordError(ctx.Err())
@@ -184,6 +189,35 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 			// Leaving this case empty causes it to exit the switch-block.
 		case <-t.C:
 		}
+		if origHeader != nil {
+			req.Header = origHeader.Clone()
+		}
+		req.ContentLength = origContentLength
+		req.GetBody = origGetBody
+		req.Header.Set(retryAttemptHeader, strconv.Itoa(executionCount))
+		if origGetBody != nil {
+			newBody, err := origGetBody()
+			if err != nil {
+				if newBody != nil {
+					_ = newBody.Close()
+				}
+				if attemptSpan != nil {
+					attemptSpan.RecordError(err)
+				}
+				return nil, err
+			}
+			req.Body = newBody
+		} else if origBody != nil {
+			req.Body = origBody
+			if s, ok := origBody.(io.Seeker); ok {
+				if _, err := s.Seek(0, io.SeekStart); err != nil {
+					if attemptSpan != nil {
+						attemptSpan.RecordError(err)
+					}
+					return nil, err
+				}
+			}
+		}
 		response, err := pipeline.Next(req, middlewareIndex)
 		if err != nil {
 			if attemptSpan != nil {
@@ -191,7 +225,7 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 			}
 			return response, err
 		}
-		return middleware.retryRequest(ctx, pipeline, middlewareIndex, options, req, response, executionCount, cumulativeDelay, observabilityName)
+		return middleware.retryRequest(ctx, pipeline, middlewareIndex, options, req, response, executionCount, cumulativeDelay, observabilityName, origHeader, origContentLength, origGetBody, origBody)
 	}
 	return resp, nil
 }

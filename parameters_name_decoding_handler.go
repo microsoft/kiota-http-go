@@ -71,7 +71,7 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 		return pipeline.Next(req, middlewareIndex)
 	}
 	reqOption, ok := req.Context().Value(parametersNameDecodingKeyValue).(parametersNameDecodingOptionsInt)
-	if !ok || reqOption == nil {
+	if !ok || isNil(reqOption) {
 		reqOption = &handler.options
 	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)

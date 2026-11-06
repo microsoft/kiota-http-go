@@ -1,12 +1,16 @@
 package nethttplibrary
 
 import (
+	"compress/gzip"
 	"context"
 	"github.com/microsoft/kiota-abstractions-go/serialization"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+	"io"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	abs "github.com/microsoft/kiota-abstractions-go"
@@ -494,13 +498,12 @@ func TestNetHttpRequestAdapter_SpanAttributes_ServerAddressAndUrlScheme(t *testi
 	assert.Equal(t, "https", urlScheme, "url.scheme must be the URI scheme")
 }
 
-
 func TestNetHttpRequestAdapter_SpanAttributes_VariedEndpoints(t *testing.T) {
 	testCases := []struct {
-		name            string
-		rawURL          string
-		expectedHost    string
-		expectedScheme  string
+		name           string
+		rawURL         string
+		expectedHost   string
+		expectedScheme string
 	}{
 		{
 			name:           "custom port http",
@@ -581,4 +584,99 @@ func TestNetHttpRequestAdapter_SpanAttributes_VariedEndpoints(t *testing.T) {
 			assert.Equal(t, tc.expectedScheme, urlScheme)
 		})
 	}
+}
+
+func TestShouldReturnNil(t *testing.T) {
+	adapter := &NetHttpRequestAdapter{}
+	assert.False(t, adapter.shouldReturnNil(nil))
+
+	resp204 := &nethttp.Response{StatusCode: 204}
+	assert.True(t, adapter.shouldReturnNil(resp204))
+
+	resp304 := &nethttp.Response{StatusCode: 304}
+	assert.True(t, adapter.shouldReturnNil(resp304))
+
+	resp302NoLocation := &nethttp.Response{
+		StatusCode: 302,
+		Header:     nethttp.Header{},
+	}
+	assert.True(t, adapter.shouldReturnNil(resp302NoLocation))
+
+	resp302WithLocation := &nethttp.Response{
+		StatusCode: 302,
+		Header:     nethttp.Header{"Location": []string{"https://example.com"}},
+	}
+	assert.False(t, adapter.shouldReturnNil(resp302WithLocation))
+
+	resp200 := &nethttp.Response{StatusCode: 200}
+	assert.False(t, adapter.shouldReturnNil(resp200))
+}
+
+func TestGetRootParseNodeEmptyBodyWithContentType(t *testing.T) {
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.NoError(t, err)
+
+	resp := &nethttp.Response{
+		StatusCode:    200,
+		ContentLength: -1,
+		Header:        nethttp.Header{"Content-Type": []string{"application/json"}},
+		Body:          io.NopCloser(strings.NewReader("")),
+	}
+	span := trace.SpanFromContext(context.Background())
+	node, _, err := adapter.getRootParseNode(context.Background(), resp, span)
+	assert.NoError(t, err)
+	assert.Nil(t, node)
+}
+
+func TestDefaultPipelineAdapterPostRetryWithObservability(t *testing.T) {
+	postPayload := []byte("adapter post request body with retry and observability")
+	attempts := 0
+
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		attempts++
+		assert.Equal(t, nethttp.MethodPost, req.Method)
+		assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"), "expected Content-Encoding: gzip on attempt %d", attempts)
+
+		gzipReader, err := gzip.NewReader(req.Body)
+		assert.NoError(t, err, "attempt %d body should be valid gzip", attempts)
+		if err == nil {
+			decompressed, readErr := io.ReadAll(gzipReader)
+			assert.NoError(t, readErr)
+			_ = gzipReader.Close()
+			assert.Equal(t, postPayload, decompressed, "attempt %d payload mismatch", attempts)
+		}
+
+		if attempts == 1 {
+			res.Header().Set("Retry-After", "0")
+			res.WriteHeader(nethttp.StatusTooManyRequests)
+			return
+		}
+
+		res.WriteHeader(nethttp.StatusNoContent)
+	}))
+	defer testServer.Close()
+
+	uri, err := url.Parse(testServer.URL)
+	assert.NoError(t, err)
+
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapterWithParseNodeFactoryAndSerializationWriterFactoryAndHttpClientAndObservabilityOptions(
+		authProvider,
+		nil,
+		nil,
+		GetDefaultClient(),
+		ObservabilityOptions{},
+	)
+	assert.NoError(t, err)
+
+	requestInfo := abs.NewRequestInformation()
+	requestInfo.SetUri(*uri)
+	requestInfo.Method = abs.POST
+	requestInfo.Content = postPayload
+	requestInfo.Headers.Add("Content-Type", "application/octet-stream")
+
+	err = adapter.SendNoContent(context.Background(), requestInfo, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, attempts)
 }

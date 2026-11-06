@@ -3,6 +3,7 @@ package nethttplibrary
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -72,8 +73,11 @@ func (o CompressionOptions) ShouldCompress() bool {
 // Intercept is invoked by the middleware pipeline to either move the request/response
 // to the next middleware in the pipeline
 func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, req *http.Request) (*http.Response, error) {
+	if req == nil {
+		return nil, errors.New("req cannot be nil")
+	}
 	reqOption, ok := req.Context().Value(compressKey).(compression)
-	if !ok {
+	if !ok || isNil(reqOption) {
 		reqOption = c.options
 	}
 
@@ -102,6 +106,9 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		}
 		return nil, err
 	}
+	if s, ok := req.Body.(io.Seeker); ok {
+		_, _ = s.Seek(0, io.SeekStart)
+	}
 
 	compressedBody, size, err := compressReqBody(unCompressedBody)
 	if err != nil {
@@ -111,9 +118,14 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		return nil, err
 	}
 
+	req = req.Clone(ctx)
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Body = compressedBody
 	req.ContentLength = int64(size)
+	req.GetBody = func() (io.ReadCloser, error) {
+		r, _, err := compressReqBody(unCompressedBody)
+		return r, err
+	}
 
 	if span != nil {
 		span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)))
@@ -127,9 +139,15 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 
 	// If response has status 415 retry request with uncompressed body
 	if resp.StatusCode == 415 {
-		delete(req.Header, "Content-Encoding")
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		req.Header.Del("Content-Encoding")
 		req.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
 		req.ContentLength = unCompressedContentLength
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(unCompressedBody)), nil
+		}
 
 		if span != nil {
 			span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)),
