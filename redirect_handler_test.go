@@ -611,6 +611,7 @@ func TestRedirectHandler_SpanHierarchyAndContextNesting(t *testing.T) {
 	redirectSpan := tracer.spans[1]
 	assert.Equal(t, "RedirectHandler_Intercept - redirect 1", redirectSpan.name)
 	assert.True(t, redirectSpan.ended, "redirect span should end")
+	assert.Equal(t, interceptSpan, redirectSpan.parentSpan, "redirect span parent should be the intercept span")
 
 	require.Len(t, pipeline.receivedReqs, 2)
 	redirectReq := pipeline.receivedReqs[1]
