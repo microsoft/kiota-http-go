@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1](https://github.com/microsoft/kiota-http-go/compare/v1.6.0...v1.6.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **chaos:** check exact path entry when full-URL entry lacks method ([5a89785](https://github.com/microsoft/kiota-http-go/commit/5a89785e39f6cdf80635de3a41cfe725383dc4e3))
+* **chaos:** evaluate regex rules against path when base URL is unconfigured ([e14e2ae](https://github.com/microsoft/kiota-http-go/commit/e14e2ae1130ec249d5a94fb20470abd6ff16a8f8))
+* **http:** prevent chaos handler panic on unmapped methods and fix client request URL resolution ([27751a8](https://github.com/microsoft/kiota-http-go/commit/27751a8451e4226f665620fd136bae6907da5e08))
+* **http:** prevent chaos handler panic on unmapped methods and fix client request URL resolution ([bd05624](https://github.com/microsoft/kiota-http-go/commit/bd056242b7b64b13d525088b114d1265eed1ccb1))
+* **observability:** correct server.address and url.scheme span attributes in request adapter ([58b8343](https://github.com/microsoft/kiota-http-go/commit/58b8343fc1f75f9913e5cfe02d46c4c3ba706ae0))
+* **observability:** correct server.address and url.scheme span attributes in request adapter ([9507744](https://github.com/microsoft/kiota-http-go/commit/950774435dcb2b06b372210bdee55a7d0bc481bd))
+* **observability:** use uri.Hostname() for server.address span attribute ([e75ac4f](https://github.com/microsoft/kiota-http-go/commit/e75ac4f4d35673f76be47e202c66a53c5485509e))
+* **retry:** clamp Retry-After delay before Duration conversion to prevent overflow ([af9b260](https://github.com/microsoft/kiota-http-go/commit/af9b260b0ac5afd3af3e57bbf7790265bf80605d))
+* **retry:** parse RFC 9110 Retry-After formats, prevent negative delays, and cap max delay ([6f3749d](https://github.com/microsoft/kiota-http-go/commit/6f3749d8f876414f6c19c3a0760b5774e308f3e2))
+* **retry:** parse RFC 9110 Retry-After formats, prevent negative delays, and cap max delay ([7796036](https://github.com/microsoft/kiota-http-go/commit/7796036541d2373251e66d691ae2a513b7296d67))
+* **useragent:** add nil receiver guards and context option validation on UserAgentHandlerOptions ([e6f1563](https://github.com/microsoft/kiota-http-go/commit/e6f15631e8ee62c7ab56a912e0100bcc094ce57a))
+* **useragent:** correct RFC 9110 product formatting and add nil-safety handling ([9b3892f](https://github.com/microsoft/kiota-http-go/commit/9b3892f43983f67d865bb7cc39ae452d9c558a34))
+* **useragent:** format product without trailing slash when version is omitted and skip empty tokens ([b79eb0b](https://github.com/microsoft/kiota-http-go/commit/b79eb0b2372eb41d292d5a817d335bfd4f9fae2f))
+
 ## [1.6.0](https://github.com/microsoft/kiota-http-go/compare/v1.5.9...v1.6.0) (2026-10-27)
 
 
