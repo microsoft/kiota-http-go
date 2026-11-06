@@ -1,6 +1,8 @@
 package nethttplibrary
 
 import (
+	"context"
+	"errors"
 	"io"
 	nethttp "net/http"
 	httptest "net/http/httptest"
@@ -11,6 +13,9 @@ import (
 	"strconv"
 
 	assert "github.com/stretchr/testify/assert"
+	require "github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestItCreatesANewRedirectHandler(t *testing.T) {
@@ -529,3 +534,156 @@ func TestRedirectMissingLocationReturnsError(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestRedirectHandlerNilRequest(t *testing.T) {
+	handler := NewRedirectHandler()
+	resp, err := handler.Intercept(nil, 0, nil)
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Contains(t, err.Error(), "req cannot be nil")
+}
+
+func TestRedirectHandlerOptionsNilSafety(t *testing.T) {
+	var nilOpts *RedirectHandlerOptions
+	assert.NotNil(t, nilOpts.GetShouldRedirect())
+	assert.True(t, nilOpts.GetShouldRedirect()(nil, nil))
+	assert.Equal(t, defaultMaxRedirects, nilOpts.GetMaxRedirect())
+	assert.NotNil(t, nilOpts.GetScrubSensitiveHeaders())
+
+	emptyOpts := &RedirectHandlerOptions{}
+	assert.NotNil(t, emptyOpts.GetShouldRedirect())
+	assert.True(t, emptyOpts.GetShouldRedirect()(nil, nil))
+}
+
+type redirectTracingPipeline struct {
+	calls        int
+	receivedReqs []*nethttp.Request
+}
+
+func (p *redirectTracingPipeline) Next(req *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+	p.calls++
+	p.receivedReqs = append(p.receivedReqs, req)
+	if p.calls == 1 {
+		return &nethttp.Response{
+			StatusCode: 302,
+			Header: nethttp.Header{
+				"Location": []string{"https://example.com/redirected"},
+			},
+			Request: req,
+		}, nil
+	}
+	return &nethttp.Response{
+		StatusCode: 200,
+		Header:     nethttp.Header{},
+		Request:    req,
+	}, nil
+}
+
+func TestRedirectHandler_SpanHierarchyAndContextNesting(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
+
+	handler := NewRedirectHandler()
+	pipeline := &redirectTracingPipeline{}
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/initial", nil)
+	require.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), observabilityOptionsKeyValue, obsOptions)
+	req = req.WithContext(ctx)
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, 2, pipeline.calls)
+
+	tracer, ok := tracerProvider.tracers[obsOptions.GetTracerInstrumentationName()]
+	require.True(t, ok, "tracer should be created")
+	require.Len(t, tracer.spans, 2, "should create intercept span and redirect 1 span")
+
+	interceptSpan := tracer.spans[0]
+	assert.Equal(t, "RedirectHandler_Intercept", interceptSpan.name)
+	assert.True(t, interceptSpan.ended, "intercept span should end")
+
+	redirectSpan := tracer.spans[1]
+	assert.Equal(t, "RedirectHandler_Intercept - redirect 1", redirectSpan.name)
+	assert.True(t, redirectSpan.ended, "redirect span should end")
+	assert.Equal(t, interceptSpan, redirectSpan.parentSpan, "redirect span parent should be the intercept span")
+
+	require.Len(t, pipeline.receivedReqs, 2)
+	redirectReq := pipeline.receivedReqs[1]
+	spanInContext := trace.SpanFromContext(redirectReq.Context())
+	assert.Equal(t, redirectSpan, spanInContext, "redirected request context should carry the active redirect span")
+}
+
+func TestRedirectHandler_RecordsErrorOnMalformedLocation(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
+
+	handler := NewRedirectHandler()
+	// Return 302 with unparseable Location header
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: 302,
+			Header: nethttp.Header{
+				"Location": []string{"://bad-url"},
+			},
+		},
+	}
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/initial", nil)
+	require.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), observabilityOptionsKeyValue, obsOptions)
+	req = req.WithContext(ctx)
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.Error(t, err)
+	assert.NotNil(t, resp)
+
+	tracer, ok := tracerProvider.tracers[obsOptions.GetTracerInstrumentationName()]
+	require.True(t, ok, "tracer should be created")
+	require.NotEmpty(t, tracer.spans)
+
+	interceptSpan := tracer.spans[0]
+	assert.Equal(t, "RedirectHandler_Intercept", interceptSpan.name)
+	assert.True(t, interceptSpan.ended)
+	require.NotEmpty(t, interceptSpan.recordedErrors, "internal redirect error should be recorded on intercept span")
+}
+
+func TestRedirectHandler_DownstreamPipelineErrorBubblesUpWithoutDuplicateRecording(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
+
+	handler := NewRedirectHandler()
+	expectedErr := errors.New("downstream connection reset")
+	pipeline := &stubPipeline{err: expectedErr}
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/initial", nil)
+	require.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), observabilityOptionsKeyValue, obsOptions)
+	req = req.WithContext(ctx)
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.ErrorIs(t, err, expectedErr)
+	assert.Nil(t, resp)
+
+	tracer, ok := tracerProvider.tracers[obsOptions.GetTracerInstrumentationName()]
+	require.True(t, ok)
+	require.NotEmpty(t, tracer.spans)
+
+	interceptSpan := tracer.spans[0]
+	assert.Equal(t, "RedirectHandler_Intercept", interceptSpan.name)
+	assert.True(t, interceptSpan.ended)
+	assert.Empty(t, interceptSpan.recordedErrors, "downstream pipeline errors should bubble up without duplicate recording on handler span")
+}
