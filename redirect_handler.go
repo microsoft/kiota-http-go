@@ -6,7 +6,6 @@ import (
 	"fmt"
 	nethttp "net/http"
 	"net/url"
-	"reflect"
 	"strings"
 
 	abs "github.com/microsoft/kiota-abstractions-go"
@@ -165,7 +164,7 @@ func (middleware RedirectHandler) Intercept(pipeline Pipeline, middlewareIndex i
 		return response, err
 	}
 	reqOption, ok := req.Context().Value(redirectKeyValue).(redirectHandlerOptionsInt)
-	if !ok || reqOption == nil || (reflect.ValueOf(reqOption).Kind() == reflect.Ptr && reflect.ValueOf(reqOption).IsNil()) {
+	if !ok || isNilInterface(reqOption) {
 		reqOption = &middleware.options
 	}
 	return middleware.redirectRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, observabilityName)
@@ -190,18 +189,19 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 			}
 			return response, err
 		}
-		if observabilityName != "" {
-			var span trace.Span
-			var redirectCtx context.Context
-			redirectCtx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
-			span.SetAttributes(attribute.Int("com.microsoft.kiota.handler.redirect.count", redirectCount),
-				httpResponseStatusCodeAttribute.Int(response.StatusCode),
-			)
-			defer span.End()
-			redirectRequest = redirectRequest.WithContext(redirectCtx)
-		}
-
-		result, err := pipeline.Next(redirectRequest, middlewareIndex)
+		result, err := func() (*nethttp.Response, error) {
+			if observabilityName != "" {
+				var span trace.Span
+				var redirectCtx context.Context
+				redirectCtx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
+				span.SetAttributes(attribute.Int("com.microsoft.kiota.handler.redirect.count", redirectCount),
+					httpResponseStatusCodeAttribute.Int(response.StatusCode),
+				)
+				defer span.End()
+				redirectRequest = redirectRequest.WithContext(redirectCtx)
+			}
+			return pipeline.Next(redirectRequest, middlewareIndex)
+		}()
 		if err != nil {
 			return result, err
 		}

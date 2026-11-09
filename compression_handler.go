@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"reflect"
 	"strings"
 
 	abstractions "github.com/microsoft/kiota-abstractions-go"
@@ -79,7 +78,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	}
 
 	reqOption, ok := req.Context().Value(compressKey).(compression)
-	if !ok || reqOption == nil || (reflect.ValueOf(reqOption).Kind() == reflect.Ptr && reflect.ValueOf(reqOption).IsNil()) {
+	if !ok || isNilInterface(reqOption) {
 		reqOption = c.options
 	}
 

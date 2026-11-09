@@ -239,6 +239,10 @@ func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs
 	if requestInfo.PathParameters == nil {
 		requestInfo.PathParameters = make(map[string]string)
 	}
+	if a == nil {
+		requestInfo.PathParameters["baseurl"] = ""
+		return
+	}
 	requestInfo.PathParameters["baseurl"] = a.GetBaseUrl()
 }
 

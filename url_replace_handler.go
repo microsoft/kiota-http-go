@@ -7,7 +7,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"net/http"
-	"reflect"
 	"strings"
 )
 
@@ -80,7 +79,7 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 	}
 
 	reqOption, ok := req.Context().Value(urlReplaceOptionKey).(urlReplaceOptionsInt)
-	if !ok || reqOption == nil || (reflect.ValueOf(reqOption).Kind() == reflect.Ptr && reflect.ValueOf(reqOption).IsNil()) {
+	if !ok || isNilInterface(reqOption) {
 		reqOption = &c.options
 	}
 

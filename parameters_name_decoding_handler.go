@@ -3,7 +3,6 @@ package nethttplibrary
 import (
 	"errors"
 	nethttp "net/http"
-	"reflect"
 	"strconv"
 	"strings"
 
@@ -78,7 +77,7 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 		return pipeline.Next(req, middlewareIndex)
 	}
 	reqOption, ok := req.Context().Value(parametersNameDecodingKeyValue).(parametersNameDecodingOptionsInt)
-	if !ok || reqOption == nil || (reflect.ValueOf(reqOption).Kind() == reflect.Ptr && reflect.ValueOf(reqOption).IsNil()) {
+	if !ok || isNilInterface(reqOption) {
 		reqOption = &handler.options
 	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)
