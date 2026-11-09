@@ -602,13 +602,23 @@ func TestNetHttpRequestAdapter_SetBaseUrlForRequestInformation_NilSafe(t *testin
 	assert.NotNil(t, reqInfo.PathParameters)
 	assert.Equal(t, "https://example.com", reqInfo.PathParameters["baseurl"])
 
-	// 3. nil adapter should also not panic and set empty baseurl
+	// 3. nil adapter should not panic and should return early without modifying path parameters
 	var nilAdapter *NetHttpRequestAdapter
-	reqInfo2 := &abs.RequestInformation{}
+	reqInfo2 := &abs.RequestInformation{
+		PathParameters: map[string]string{
+			"baseurl": "https://preset.example.com",
+		},
+	}
 	assert.NotPanics(t, func() {
 		nilAdapter.setBaseUrlForRequestInformation(reqInfo2)
 	})
-	assert.Equal(t, "", reqInfo2.PathParameters["baseurl"])
+	assert.Equal(t, "https://preset.example.com", reqInfo2.PathParameters["baseurl"])
+
+	reqInfo3 := &abs.RequestInformation{}
+	assert.NotPanics(t, func() {
+		nilAdapter.setBaseUrlForRequestInformation(reqInfo3)
+	})
+	assert.Nil(t, reqInfo3.PathParameters)
 }
 
 func TestSendEnum_ResponseHandler_ReturnsRawResult(t *testing.T) {

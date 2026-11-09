@@ -233,15 +233,11 @@ func (a *NetHttpRequestAdapter) getResponsePrimaryContentType(response *nethttp.
 }
 
 func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs.RequestInformation) {
-	if requestInfo == nil {
+	if requestInfo == nil || a == nil {
 		return
 	}
 	if requestInfo.PathParameters == nil {
 		requestInfo.PathParameters = make(map[string]string)
-	}
-	if a == nil {
-		requestInfo.PathParameters["baseurl"] = ""
-		return
 	}
 	requestInfo.PathParameters["baseurl"] = a.GetBaseUrl()
 }
