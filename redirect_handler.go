@@ -189,19 +189,18 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 			}
 			return response, err
 		}
-		result, err := func() (*nethttp.Response, error) {
-			if observabilityName != "" {
-				var span trace.Span
-				var redirectCtx context.Context
-				redirectCtx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
-				span.SetAttributes(attribute.Int("com.microsoft.kiota.handler.redirect.count", redirectCount),
-					httpResponseStatusCodeAttribute.Int(response.StatusCode),
-				)
-				defer span.End()
-				redirectRequest = redirectRequest.WithContext(redirectCtx)
-			}
-			return pipeline.Next(redirectRequest, middlewareIndex)
-		}()
+		if observabilityName != "" {
+			var span trace.Span
+			var redirectCtx context.Context
+			redirectCtx, span = otel.GetTracerProvider().Tracer(observabilityName).Start(ctx, "RedirectHandler_Intercept - redirect "+fmt.Sprint(redirectCount))
+			span.SetAttributes(attribute.Int("com.microsoft.kiota.handler.redirect.count", redirectCount),
+				httpResponseStatusCodeAttribute.Int(response.StatusCode),
+			)
+			defer span.End()
+			redirectRequest = redirectRequest.WithContext(redirectCtx)
+		}
+
+		result, err := pipeline.Next(redirectRequest, middlewareIndex)
 		if err != nil {
 			return result, err
 		}
