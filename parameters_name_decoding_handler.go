@@ -54,11 +54,17 @@ func (options *ParametersNameDecodingOptions) GetKey() abs.RequestOptionKey {
 
 // GetEnable returns the enable value from the option
 func (options *ParametersNameDecodingOptions) GetEnable() bool {
+	if options == nil {
+		return false
+	}
 	return options.Enable
 }
 
 // GetParametersToDecode returns the parametersToDecode value from the option
 func (options *ParametersNameDecodingOptions) GetParametersToDecode() []byte {
+	if options == nil {
+		return nil
+	}
 	return options.ParametersToDecode
 }
 
@@ -71,7 +77,7 @@ func (handler *ParametersNameDecodingHandler) Intercept(pipeline Pipeline, middl
 		return pipeline.Next(req, middlewareIndex)
 	}
 	reqOption, ok := req.Context().Value(parametersNameDecodingKeyValue).(parametersNameDecodingOptionsInt)
-	if !ok || reqOption == nil {
+	if !ok || isNilInterface(reqOption) {
 		reqOption = &handler.options
 	}
 	obsOptions := GetObservabilityOptionsFromRequest(req)

@@ -192,24 +192,31 @@ const AuthenticateChallengedEventKey = "com.microsoft.kiota.authenticate_challen
 func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, response *nethttp.Response, requestInfo *abs.RequestInformation, claims string, spanForAttributes trace.Span) (*nethttp.Response, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "retryCAEResponseIfRequired")
 	defer span.End()
-	if response.StatusCode == 401 &&
+	if response != nil && response.StatusCode == 401 &&
 		claims == "" { //avoid infinite loop, we only retry once
-		authenticateHeaderVal := response.Header.Get("WWW-Authenticate")
-		if authenticateHeaderVal != "" && reBearer.Match([]byte(authenticateHeaderVal)) {
-			span.AddEvent(AuthenticateChallengedEventKey)
-			spanForAttributes.SetAttributes(httpRequestResendCountAttribute.Int(1))
-			responseClaims := ""
-			parametersRaw := string(reBearer.ReplaceAll([]byte(authenticateHeaderVal), []byte("")))
-			parameters := strings.Split(parametersRaw, ",")
-			for _, parameter := range parameters {
-				if strings.HasPrefix(strings.Trim(parameter, " "), claimsKey) {
-					responseClaims = reClaims.FindStringSubmatch(parameter)[1]
-					break
+		if response.Header != nil {
+			authenticateHeaderVal := response.Header.Get("WWW-Authenticate")
+			if authenticateHeaderVal != "" && reBearer.Match([]byte(authenticateHeaderVal)) {
+				span.AddEvent(AuthenticateChallengedEventKey)
+				if spanForAttributes != nil {
+					spanForAttributes.SetAttributes(httpRequestResendCountAttribute.Int(1))
 				}
-			}
-			if responseClaims != "" {
-				defer a.purge(response)
-				return a.getHttpResponseMessage(ctx, requestInfo, responseClaims, spanForAttributes)
+				responseClaims := ""
+				parametersRaw := string(reBearer.ReplaceAll([]byte(authenticateHeaderVal), []byte("")))
+				parameters := strings.Split(parametersRaw, ",")
+				for _, parameter := range parameters {
+					if strings.HasPrefix(strings.Trim(parameter, " "), claimsKey) {
+						matches := reClaims.FindStringSubmatch(parameter)
+						if len(matches) > 1 {
+							responseClaims = matches[1]
+							break
+						}
+					}
+				}
+				if responseClaims != "" {
+					defer a.purge(response)
+					return a.getHttpResponseMessage(ctx, requestInfo, responseClaims, spanForAttributes)
+				}
 			}
 		}
 	}
@@ -217,7 +224,7 @@ func (a *NetHttpRequestAdapter) retryCAEResponseIfRequired(ctx context.Context, 
 }
 
 func (a *NetHttpRequestAdapter) getResponsePrimaryContentType(response *nethttp.Response) string {
-	if response.Header == nil {
+	if response == nil || response.Header == nil {
 		return ""
 	}
 	rawType := response.Header.Get("Content-Type")
@@ -226,6 +233,12 @@ func (a *NetHttpRequestAdapter) getResponsePrimaryContentType(response *nethttp.
 }
 
 func (a *NetHttpRequestAdapter) setBaseUrlForRequestInformation(requestInfo *abs.RequestInformation) {
+	if requestInfo == nil || a == nil {
+		return
+	}
+	if requestInfo.PathParameters == nil {
+		requestInfo.PathParameters = make(map[string]string)
+	}
 	requestInfo.PathParameters["baseurl"] = a.GetBaseUrl()
 }
 
@@ -257,6 +270,16 @@ func (a *NetHttpRequestAdapter) prepareContext(ctx context.Context, requestInfo 
 
 // ConvertToNativeRequest converts the given RequestInformation into a native HTTP request.
 func (a *NetHttpRequestAdapter) ConvertToNativeRequest(context context.Context, requestInfo *abs.RequestInformation) (any, error) {
+	if a == nil {
+		return nil, errors.New("adapter cannot be nil")
+	}
+	if requestInfo == nil {
+		return nil, errors.New("requestInfo cannot be nil")
+	}
+	a.setBaseUrlForRequestInformation(requestInfo)
+	if a.authenticationProvider == nil {
+		return nil, errors.New("authenticationProvider cannot be nil")
+	}
 	err := a.authenticationProvider.AuthenticateRequest(context, requestInfo, nil)
 	if err != nil {
 		return nil, err
@@ -424,7 +447,7 @@ func (a *NetHttpRequestAdapter) SendEnum(ctx context.Context, requestInfo *abs.R
 		if result == nil {
 			return nil, nil
 		}
-		return result.(absser.Parsable), nil
+		return result, nil
 	} else if response != nil {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
@@ -597,7 +620,7 @@ func (a *NetHttpRequestAdapter) SendPrimitive(ctx context.Context, requestInfo *
 		if result == nil {
 			return nil, nil
 		}
-		return result.(absser.Parsable), nil
+		return result, nil
 	} else if response != nil {
 		defer a.purge(response)
 		err = a.throwIfFailedResponse(ctx, response, errorMappings, span)
@@ -750,7 +773,7 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	ctx, span := otel.GetTracerProvider().Tracer(a.observabilityOptions.GetTracerInstrumentationName()).Start(ctx, "getRootParseNode")
 	defer span.End()
 
-	if response.ContentLength == 0 {
+	if response == nil || response.ContentLength == 0 || response.Body == nil {
 		return nil, ctx, nil
 	}
 
@@ -770,6 +793,9 @@ func (a *NetHttpRequestAdapter) getRootParseNode(ctx context.Context, response *
 	return rootNode, ctx, err
 }
 func (a *NetHttpRequestAdapter) purge(response *nethttp.Response) error {
+	if response == nil || response.Body == nil {
+		return nil
+	}
 	_, _ = io.ReadAll(response.Body) //we don't care about errors comming from reading the body, just trying to purge anything that maybe left
 	err := response.Body.Close()
 	if err != nil {
@@ -778,7 +804,7 @@ func (a *NetHttpRequestAdapter) purge(response *nethttp.Response) error {
 	return nil
 }
 func (a *NetHttpRequestAdapter) shouldReturnNil(response *nethttp.Response) bool {
-	return response.StatusCode == 204
+	return response != nil && response.StatusCode == 204
 }
 
 // ErrorMappingFoundAttributeName is the attribute name used to indicate whether an error code mapping was found.

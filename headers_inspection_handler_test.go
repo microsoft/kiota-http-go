@@ -18,11 +18,13 @@ import (
 )
 
 type stubPipeline struct {
-	response *nethttp.Response
-	err      error
+	response        *nethttp.Response
+	err             error
+	receivedRequest *nethttp.Request
 }
 
 func (s *stubPipeline) Next(req *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
+	s.receivedRequest = req
 	return s.response, s.err
 }
 
@@ -38,6 +40,7 @@ type recordingSpan struct {
 	recordedErrors []error
 	events         []recordedEvent
 	attributes     []attribute.KeyValue
+	parentSpan     trace.Span
 }
 
 func (s *recordingSpan) RecordError(err error, options ...trace.EventOption) {
@@ -73,7 +76,7 @@ type recordingTracer struct {
 }
 
 func (t *recordingTracer) Start(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
-	span := &recordingSpan{name: spanName}
+	span := &recordingSpan{name: spanName, parentSpan: trace.SpanFromContext(ctx)}
 	t.spans = append(t.spans, span)
 	return trace.ContextWithSpan(ctx, span), span
 }

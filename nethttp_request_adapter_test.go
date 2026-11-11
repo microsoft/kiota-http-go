@@ -582,3 +582,203 @@ func TestNetHttpRequestAdapter_SpanAttributes_VariedEndpoints(t *testing.T) {
 		})
 	}
 }
+
+func TestNetHttpRequestAdapter_SetBaseUrlForRequestInformation_NilSafe(t *testing.T) {
+	adapter := &NetHttpRequestAdapter{
+		baseUrl: "https://example.com",
+	}
+
+	// 1. requestInfo is nil should be a safe no-op
+	assert.NotPanics(t, func() {
+		adapter.setBaseUrlForRequestInformation(nil)
+	})
+
+	// 2. requestInfo with nil PathParameters should be initialized without panicking
+	reqInfo := &abs.RequestInformation{}
+	assert.Nil(t, reqInfo.PathParameters)
+	assert.NotPanics(t, func() {
+		adapter.setBaseUrlForRequestInformation(reqInfo)
+	})
+	assert.NotNil(t, reqInfo.PathParameters)
+	assert.Equal(t, "https://example.com", reqInfo.PathParameters["baseurl"])
+
+	// 3. nil adapter should not panic and should return early without modifying path parameters
+	var nilAdapter *NetHttpRequestAdapter
+	reqInfo2 := &abs.RequestInformation{
+		PathParameters: map[string]string{
+			"baseurl": "https://preset.example.com",
+		},
+	}
+	assert.NotPanics(t, func() {
+		nilAdapter.setBaseUrlForRequestInformation(reqInfo2)
+	})
+	assert.Equal(t, "https://preset.example.com", reqInfo2.PathParameters["baseurl"])
+
+	reqInfo3 := &abs.RequestInformation{}
+	assert.NotPanics(t, func() {
+		nilAdapter.setBaseUrlForRequestInformation(reqInfo3)
+	})
+	assert.Nil(t, reqInfo3.PathParameters)
+}
+
+func TestSendEnum_ResponseHandler_ReturnsRawResult(t *testing.T) {
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.WriteHeader(200)
+	}))
+	defer testServer.Close()
+
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.NoError(t, err)
+
+	uri, err := url.Parse(testServer.URL)
+	assert.NoError(t, err)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	responseHandler := func(response interface{}, errorMappings abs.ErrorMappings) (interface{}, error) {
+		return "CustomEnumValue", nil
+	}
+	handlerOption := abs.NewRequestHandlerOption()
+	handlerOption.SetResponseHandler(responseHandler)
+	request.AddRequestOptions([]abs.RequestOption{handlerOption})
+
+	result, err := adapter.SendEnum(context.Background(), request, nil, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "CustomEnumValue", result)
+}
+
+func TestSendPrimitive_ResponseHandler_ReturnsRawResult(t *testing.T) {
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.WriteHeader(200)
+	}))
+	defer testServer.Close()
+
+	authProvider := &absauth.AnonymousAuthenticationProvider{}
+	adapter, err := NewNetHttpRequestAdapter(authProvider)
+	assert.NoError(t, err)
+
+	uri, err := url.Parse(testServer.URL)
+	assert.NoError(t, err)
+	request := abs.NewRequestInformation()
+	request.SetUri(*uri)
+	request.Method = abs.GET
+
+	responseHandler := func(response interface{}, errorMappings abs.ErrorMappings) (interface{}, error) {
+		return 42, nil
+	}
+	handlerOption := abs.NewRequestHandlerOption()
+	handlerOption.SetResponseHandler(responseHandler)
+	request.AddRequestOptions([]abs.RequestOption{handlerOption})
+
+	result, err := adapter.SendPrimitive(context.Background(), request, "int", nil)
+	assert.NoError(t, err)
+	assert.Equal(t, 42, result)
+}
+
+func TestConvertToNativeRequest_NilGuardsAndBaseUrl(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. nil adapter returns error
+	var nilAdapter *NetHttpRequestAdapter
+	reqInfo := abs.NewRequestInformation()
+	req, err := nilAdapter.ConvertToNativeRequest(ctx, reqInfo)
+	assert.Error(t, err)
+	assert.Nil(t, req)
+	assert.Contains(t, err.Error(), "adapter cannot be nil")
+
+	// 2. nil requestInfo returns error
+	adapter := &NetHttpRequestAdapter{
+		authenticationProvider: &absauth.AnonymousAuthenticationProvider{},
+	}
+	req, err = adapter.ConvertToNativeRequest(ctx, nil)
+	assert.Error(t, err)
+	assert.Nil(t, req)
+	assert.Contains(t, err.Error(), "requestInfo cannot be nil")
+
+	// 3. nil authenticationProvider returns error
+	adapterNoAuth := &NetHttpRequestAdapter{}
+	req, err = adapterNoAuth.ConvertToNativeRequest(ctx, reqInfo)
+	assert.Error(t, err)
+	assert.Nil(t, req)
+	assert.Contains(t, err.Error(), "authenticationProvider cannot be nil")
+
+	// 4. sets base url on requestInfo
+	adapterWithBase := &NetHttpRequestAdapter{
+		authenticationProvider: &absauth.AnonymousAuthenticationProvider{},
+		baseUrl:                "https://example.com/v1.0",
+	}
+	reqWithTemplate := abs.NewRequestInformation()
+	reqWithTemplate.UrlTemplate = "{+baseurl}/me"
+	reqWithTemplate.Method = abs.GET
+	nativeReq, err := adapterWithBase.ConvertToNativeRequest(ctx, reqWithTemplate)
+	assert.NoError(t, err)
+	assert.NotNil(t, nativeReq)
+	assert.Equal(t, "https://example.com/v1.0", reqWithTemplate.PathParameters["baseurl"])
+}
+
+func TestNetHttpRequestAdapter_PurgeAndResponseNilGuards(t *testing.T) {
+	adapter := &NetHttpRequestAdapter{}
+
+	// 1. purge with nil response or nil body does not panic
+	assert.NotPanics(t, func() {
+		err := adapter.purge(nil)
+		assert.NoError(t, err)
+	})
+	assert.NotPanics(t, func() {
+		err := adapter.purge(&nethttp.Response{Body: nil})
+		assert.NoError(t, err)
+	})
+
+	// 2. shouldReturnNil with nil response returns false
+	assert.False(t, adapter.shouldReturnNil(nil))
+	assert.True(t, adapter.shouldReturnNil(&nethttp.Response{StatusCode: 204}))
+	assert.False(t, adapter.shouldReturnNil(&nethttp.Response{StatusCode: 200}))
+
+	// 3. getResponsePrimaryContentType with nil response returns ""
+	assert.Equal(t, "", adapter.getResponsePrimaryContentType(nil))
+	assert.Equal(t, "", adapter.getResponsePrimaryContentType(&nethttp.Response{Header: nil}))
+
+	// 4. getRootParseNode with nil response or nil body returns nil without panic
+	node, _, err := adapter.getRootParseNode(context.Background(), nil, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, node)
+
+	node, _, err = adapter.getRootParseNode(context.Background(), &nethttp.Response{ContentLength: -1, Body: nil}, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, node)
+}
+
+func TestRetryCAEResponseIfRequired_NilAndMalformedGuards(t *testing.T) {
+	adapter := &NetHttpRequestAdapter{}
+
+	// 1. nil response should not panic and return nil
+	res, err := adapter.retryCAEResponseIfRequired(context.Background(), nil, nil, "", nil)
+	assert.NoError(t, err)
+	assert.Nil(t, res)
+
+	// 2. malformed claims parameter without quotes should not panic with index out of range
+	malformedHeader := nethttp.Header{}
+	malformedHeader.Set("WWW-Authenticate", "Bearer claims=malformed_no_quotes")
+	res401 := &nethttp.Response{
+		StatusCode: 401,
+		Header:     malformedHeader,
+	}
+	assert.NotPanics(t, func() {
+		res, err = adapter.retryCAEResponseIfRequired(context.Background(), res401, nil, "", nil)
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, res401, res)
+
+	// 3. 401 response with nil header should not panic
+	resNilHeader := &nethttp.Response{
+		StatusCode: 401,
+		Header:     nil,
+	}
+	assert.NotPanics(t, func() {
+		res, err = adapter.retryCAEResponseIfRequired(context.Background(), resNilHeader, nil, "", nil)
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, resNilHeader, res)
+}
