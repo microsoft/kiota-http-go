@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"go.opentelemetry.io/otel"
+	"io"
 	nethttp "net/http"
 	httptest "net/http/httptest"
 	"strconv"
+	"strings"
 	testing "testing"
 	"time"
 
@@ -484,4 +486,50 @@ func TestRetryHandler_OptionsNilSafety(t *testing.T) {
 	}
 	assert.Equal(t, absoluteMaxDelaySeconds, optBounds.GetDelaySeconds())
 	assert.Equal(t, absoluteMaxRetries, optBounds.GetMaxRetries())
+}
+
+func TestItResendsTheQueryBodyOnRetry(t *testing.T) {
+	const body = `{"filter":"name eq 'kiota'"}`
+	receivedBodies := make([]string, 0, 2)
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		received, _ := io.ReadAll(req.Body)
+		receivedBodies = append(receivedBodies, string(received))
+		if req.Header.Get("Retry-Attempt") == "" {
+			res.WriteHeader(429)
+		} else {
+			res.WriteHeader(200)
+		}
+	}))
+	defer testServer.Close()
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequest("QUERY", testServer.URL, nil)
+	require.NoError(t, err)
+	req.Body = NopCloser(strings.NewReader(body))
+	req.ContentLength = int64(len(body))
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, []string{body, body}, receivedBodies)
+}
+
+func TestItDoesntRetryQueryWithUnbufferedBody(t *testing.T) {
+	requestCount := 0
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		requestCount++
+		res.WriteHeader(429)
+	}))
+	defer testServer.Close()
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequest("QUERY", testServer.URL, nil)
+	require.NoError(t, err)
+	req.Body = NopCloser(strings.NewReader("body"))
+	req.ContentLength = -1
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, 429, resp.StatusCode)
+	assert.Equal(t, 1, requestCount)
 }
