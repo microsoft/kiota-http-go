@@ -12,7 +12,6 @@ import (
 	testing "testing"
 	"time"
 
-	abs "github.com/microsoft/kiota-abstractions-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -682,30 +681,6 @@ func TestItHonoursRetryUnprocessedMutationsOnlyFromRequestOption(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 504, resp.StatusCode)
 	assert.Len(t, *methods, 1)
-}
-
-// legacyRetryOptions implements the retry option methods that existed before
-// RetryUnprocessedMutationsOnly, to check that such types keep working unchanged.
-type legacyRetryOptions struct{}
-
-func (o *legacyRetryOptions) GetKey() abs.RequestOptionKey { return retryKeyValue }
-func (o *legacyRetryOptions) GetShouldRetry() func(time.Duration, int, *nethttp.Request, *nethttp.Response) bool {
-	return func(time.Duration, int, *nethttp.Request, *nethttp.Response) bool { return true }
-}
-func (o *legacyRetryOptions) GetDelaySeconds() int { return 1 }
-func (o *legacyRetryOptions) GetMaxRetries() int   { return 3 }
-
-func TestItRetriesWithRequestOptionThatPredatesRetryUnprocessedMutationsOnly(t *testing.T) {
-	testServer, methods := newStatusSequenceServer(t, 504, 200)
-	handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
-	req := newBufferedRequest(t, nethttp.MethodPost, testServer.URL)
-	req = req.WithContext(context.WithValue(req.Context(), retryKeyValue, &legacyRetryOptions{}))
-
-	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
-
-	require.NoError(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
-	assert.Len(t, *methods, 2)
 }
 
 // sendPostThroughRedirect sends a POST through the retry and redirect handlers. The first

@@ -67,11 +67,6 @@ type retryHandlerOptionsInt interface {
 	GetShouldRetry() func(delay time.Duration, executionCount int, request *nethttp.Request, response *nethttp.Response) bool
 	GetDelaySeconds() int
 	GetMaxRetries() int
-}
-
-// retryUnprocessedMutationsOnlyOption is checked separately from retryHandlerOptionsInt,
-// so that option types written for the existing interface keep satisfying it.
-type retryUnprocessedMutationsOnlyOption interface {
 	GetRetryUnprocessedMutationsOnly() bool
 }
 
@@ -239,8 +234,7 @@ func (middleware RetryHandler) isRetriableRequest(req *nethttp.Request) bool {
 // The retry resends req itself, even when a redirect changed the method along the way, so req.Method is the method to check,
 // and a POST or PATCH that was redirected to another method isn't retried at all.
 func (middleware RetryHandler) isRetriableForMethod(options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response) bool {
-	option, ok := options.(retryUnprocessedMutationsOnlyOption)
-	if !ok || isNilInterface(option) || !option.GetRetryUnprocessedMutationsOnly() || !isNonIdempotentMethod(req.Method) {
+	if !options.GetRetryUnprocessedMutationsOnly() || !isNonIdempotentMethod(req.Method) {
 		return true
 	}
 	// A redirect that changed the method (a 301, 302 or 303 turning a POST into a GET) means the
