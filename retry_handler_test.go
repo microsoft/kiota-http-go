@@ -565,3 +565,199 @@ func TestRetryHandlerClosesResponseBodyOnRetry(t *testing.T) {
 	assert.True(t, bodyTracker.closed, "retried response body should be closed")
 }
 
+// newStatusSequenceServer answers each request with the next status code in statusCodes
+// and records the method of every request it receives. Retry-After: 0 keeps retries fast.
+func newStatusSequenceServer(t *testing.T, statusCodes ...int) (*httptest.Server, *[]string) {
+	t.Helper()
+	methods := make([]string, 0, len(statusCodes))
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		methods = append(methods, req.Method)
+		status := 200
+		if len(methods) <= len(statusCodes) {
+			status = statusCodes[len(methods)-1]
+		}
+		res.Header().Set("Retry-After", "0")
+		res.WriteHeader(status)
+	}))
+	t.Cleanup(testServer.Close)
+	return testServer, &methods
+}
+
+func newBufferedRequest(t *testing.T, method string, url string) *nethttp.Request {
+	t.Helper()
+	const body = `{"message":"hello"}`
+	req, err := nethttp.NewRequest(method, url, strings.NewReader(body))
+	require.NoError(t, err)
+	return req
+}
+
+func TestRetryUnprocessedMutationsOnlyDefaultsToFalse(t *testing.T) {
+	assert.False(t, (&RetryHandlerOptions{}).GetRetryUnprocessedMutationsOnly())
+	var nilOptions *RetryHandlerOptions
+	assert.False(t, nilOptions.GetRetryUnprocessedMutationsOnly())
+}
+
+func TestItRetriesNonIdempotentRequestOnGatewayTimeoutByDefault(t *testing.T) {
+	for _, method := range []string{nethttp.MethodPost, nethttp.MethodPatch} {
+		t.Run(method, func(t *testing.T) {
+			testServer, methods := newStatusSequenceServer(t, 504, 200)
+			handler := NewRetryHandler()
+
+			resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, method, testServer.URL))
+
+			require.NoError(t, err)
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.Len(t, *methods, 2)
+		})
+	}
+}
+
+func TestItDoesntRetryNonIdempotentRequestOnGatewayTimeoutWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	for _, method := range []string{nethttp.MethodPost, nethttp.MethodPatch, "post"} {
+		t.Run(method, func(t *testing.T) {
+			testServer, methods := newStatusSequenceServer(t, 504, 200)
+			handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
+
+			resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, method, testServer.URL))
+
+			require.NoError(t, err)
+			assert.Equal(t, 504, resp.StatusCode)
+			assert.Len(t, *methods, 1)
+		})
+	}
+}
+
+func TestItRetriesNonIdempotentRequestWhenNotProcessedAndRetryUnprocessedMutationsOnly(t *testing.T) {
+	for _, method := range []string{nethttp.MethodPost, nethttp.MethodPatch} {
+		for _, status := range []int{429, 503} {
+			t.Run(method+" "+strconv.Itoa(status), func(t *testing.T) {
+				testServer, methods := newStatusSequenceServer(t, status, 200)
+				handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
+
+				resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, method, testServer.URL))
+
+				require.NoError(t, err)
+				assert.Equal(t, 200, resp.StatusCode)
+				assert.Len(t, *methods, 2)
+			})
+		}
+	}
+}
+
+func TestItRetriesIdempotentRequestOnGatewayTimeoutWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	for _, method := range []string{nethttp.MethodGet, nethttp.MethodPut, nethttp.MethodDelete, "QUERY"} {
+		t.Run(method, func(t *testing.T) {
+			testServer, methods := newStatusSequenceServer(t, 504, 200)
+			handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
+
+			resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, method, testServer.URL))
+
+			require.NoError(t, err)
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.Len(t, *methods, 2)
+		})
+	}
+}
+
+func TestItStopsRetryingNonIdempotentRequestWhenALaterResponseLeavesOutcomeUnknown(t *testing.T) {
+	testServer, methods := newStatusSequenceServer(t, 503, 504, 200)
+	handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, nethttp.MethodPost, testServer.URL))
+
+	require.NoError(t, err)
+	assert.Equal(t, 504, resp.StatusCode)
+	assert.Len(t, *methods, 2)
+}
+
+func TestItHonoursRetryUnprocessedMutationsOnlyFromRequestOption(t *testing.T) {
+	testServer, methods := newStatusSequenceServer(t, 504, 200)
+	handler := NewRetryHandler()
+	req := newBufferedRequest(t, nethttp.MethodPost, testServer.URL)
+	req = req.WithContext(context.WithValue(req.Context(), retryKeyValue, &RetryHandlerOptions{RetryUnprocessedMutationsOnly: true}))
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, 504, resp.StatusCode)
+	assert.Len(t, *methods, 1)
+}
+
+// sendPostThroughRedirect sends a POST through the retry and redirect handlers. The first
+// request is redirected with redirectStatus, the redirected request gets redirectedStatus
+// once, and every later request gets 200. It returns the final status and each request's
+// method and path.
+func sendPostThroughRedirect(t *testing.T, redirectStatus int, redirectedStatus int) (int, []string) {
+	t.Helper()
+	requests := make([]string, 0, 4)
+	redirectedCalls := 0
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		requests = append(requests, req.Method+" "+req.URL.Path)
+		if req.URL.Path == "/redirected" {
+			redirectedCalls++
+			res.Header().Set("Retry-After", "0")
+			if redirectedCalls == 1 {
+				res.WriteHeader(redirectedStatus)
+			} else {
+				res.WriteHeader(200)
+			}
+			return
+		}
+		res.Header().Set("Location", "/redirected")
+		res.WriteHeader(redirectStatus)
+	}))
+	t.Cleanup(testServer.Close)
+	client := &nethttp.Client{Transport: NewCustomTransport(
+		NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true}),
+		NewRedirectHandler(),
+	)}
+
+	resp, err := client.Do(newBufferedRequest(t, nethttp.MethodPost, testServer.URL+"/send"))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode, requests
+}
+
+func TestItDoesntResendPostRedirectedToGetOnUnprocessedStatusWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	// The 303 shows the server accepted the POST; the 503 only describes the redirected GET.
+	status, requests := sendPostThroughRedirect(t, 303, 503)
+
+	assert.Equal(t, 503, status)
+	assert.Equal(t, []string{"POST /send", "GET /redirected"}, requests)
+}
+
+func TestItRetriesPostRedirectedAsPostOnUnprocessedStatusWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	// A 307 keeps the method, so a 503 from the target still means the POST wasn't processed.
+	status, requests := sendPostThroughRedirect(t, 307, 503)
+
+	assert.Equal(t, 200, status)
+	assert.Equal(t, []string{"POST /send", "POST /redirected", "POST /send", "POST /redirected"}, requests)
+}
+
+func TestItDoesntResendRedirectedPostWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	// The retry handler sits outside the redirect handler and resends the original request,
+	// so a POST whose redirect target returns 504 would be POSTed again.
+	methods := make([]string, 0, 2)
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		methods = append(methods, req.Method+" "+req.URL.Path)
+		if req.URL.Path == "/redirected" {
+			res.Header().Set("Retry-After", "0")
+			res.WriteHeader(504)
+			return
+		}
+		res.Header().Set("Location", "/redirected")
+		res.WriteHeader(303)
+	}))
+	defer testServer.Close()
+	client := &nethttp.Client{Transport: NewCustomTransport(
+		NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true}),
+		NewRedirectHandler(),
+	)}
+
+	resp, err := client.Do(newBufferedRequest(t, nethttp.MethodPost, testServer.URL+"/send"))
+
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, 504, resp.StatusCode)
+	assert.Equal(t, []string{"POST /send", "GET /redirected"}, methods)
+}
