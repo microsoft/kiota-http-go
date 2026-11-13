@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0](https://github.com/microsoft/kiota-http-go/compare/v1.6.1...v1.7.0) (2026-11-13)
+
+
+### Features
+
+* add option to retry only unprocessed mutations ([3630bdf](https://github.com/microsoft/kiota-http-go/commit/3630bdfe720aa0ed680c08fdd76b3cdd8f873d46))
+* add option to retry only unprocessed mutations ([865a020](https://github.com/microsoft/kiota-http-go/commit/865a020774c75016ff67260a0cb41585d287f8de))
+* add support for the HTTP QUERY verb (RFC 10008) ([2afc261](https://github.com/microsoft/kiota-http-go/commit/2afc2615b341e29c75d1fad9d7ddea7acaf7d832))
+
+
+### Bug Fixes
+
+* **adapter:** return early from setBaseUrlForRequestInformation when receiver is nil ([e49bc56](https://github.com/microsoft/kiota-http-go/commit/e49bc563cc160530f1675c3b3df4a48ad5d6c77d))
+* don't resend a POST that a redirect turned into a GET ([0fb24d0](https://github.com/microsoft/kiota-http-go/commit/0fb24d015b0788c8e18b4f75e5d2ceda323d869f))
+* **http:** close intermediate response bodies to prevent socket leaks and honor per-request header scrubber ([2a1e879](https://github.com/microsoft/kiota-http-go/commit/2a1e879ea8777811482bf9d59f146998f9a2a5cb))
+* **http:** close intermediate response bodies to prevent socket leaks and honor per-request header scrubber ([325e128](https://github.com/microsoft/kiota-http-go/commit/325e128fd70683bf09655eaae2443ba8c685c242))
+* **http:** guard nil adapter in setBaseUrl, scope redirect span defer, and extract isNilInterface helper ([1eae204](https://github.com/microsoft/kiota-http-go/commit/1eae20491cb3a0f7936888db7ab3c0c5f196d5d8))
+* **http:** improve adapter robustness, defensive nil-guards, and pipeline error telemetry ([e9e2ae3](https://github.com/microsoft/kiota-http-go/commit/e9e2ae377a868ee7e05ae3d00c780e68b9e6307c))
+
 ## [1.6.1](https://github.com/microsoft/kiota-http-go/compare/v1.6.0...v1.6.1) (2026-11-09)
 
 
