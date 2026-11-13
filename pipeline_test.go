@@ -1,9 +1,11 @@
 package nethttplibrary
 
 import (
-	assert "github.com/stretchr/testify/assert"
+	"io"
 	"net/http"
 	"testing"
+
+	assert "github.com/stretchr/testify/assert"
 )
 
 type TestMiddleware struct{}
@@ -70,3 +72,25 @@ func TestItGetsADefaultTransportIfNoneIsProvided(t *testing.T) {
 	customTransport := NewCustomTransport()
 	assert.NotNil(t, customTransport.middlewarePipeline.transport)
 }
+
+type dynamicPipeline struct {
+	next func(req *http.Request, middlewareIndex int) (*http.Response, error)
+}
+
+func (d *dynamicPipeline) Next(req *http.Request, middlewareIndex int) (*http.Response, error) {
+	if d.next != nil {
+		return d.next(req, middlewareIndex)
+	}
+	return nil, nil
+}
+
+type trackingReadCloser struct {
+	io.Reader
+	closed bool
+}
+
+func (t *trackingReadCloser) Close() error {
+	t.closed = true
+	return nil
+}
+
