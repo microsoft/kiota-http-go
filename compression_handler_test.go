@@ -9,6 +9,7 @@ import (
 	"net/http"
 	nethttp "net/http"
 	httptest "net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -198,3 +199,35 @@ func TestCompressionHandlerTypedNilOptionInContext(t *testing.T) {
 		assert.NotNil(t, resp)
 	})
 }
+
+func TestCompressionHandlerCloses415ResponseBodyOnRetry(t *testing.T) {
+	handler := NewCompressionHandler()
+	bodyTracker := &trackingReadCloser{Reader: strings.NewReader("unsupported media type")}
+	resp415 := &nethttp.Response{
+		StatusCode: 415,
+		Header:     nethttp.Header{},
+		Body:       bodyTracker,
+	}
+	resp200 := &nethttp.Response{
+		StatusCode: nethttp.StatusOK,
+		Header:     nethttp.Header{},
+	}
+	req, err := nethttp.NewRequest(nethttp.MethodPost, "https://example.com/upload", strings.NewReader("hello world"))
+	assert.NoError(t, err)
+
+	callCount := 0
+	pipeline := &dynamicPipeline{
+		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return resp415, nil
+			}
+			return resp200, nil
+		},
+	}
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	assert.True(t, bodyTracker.closed, "415 response body should be closed on retry")
+}
+

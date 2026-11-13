@@ -189,6 +189,9 @@ func (middleware RedirectHandler) redirectRequest(ctx context.Context, pipeline 
 			}
 			return response, err
 		}
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
 		if observabilityName != "" {
 			var span trace.Span
 			var redirectCtx context.Context
@@ -263,6 +266,11 @@ func (middleware RedirectHandler) getRedirectRequest(request *nethttp.Request, r
 
 	// Scrub sensitive headers before following the redirect
 	scrubber := middleware.options.GetScrubSensitiveHeaders()
+	if request != nil && request.Context() != nil {
+		if reqOption, ok := request.Context().Value(redirectKeyValue).(redirectHandlerOptionsInt); ok && !isNilInterface(reqOption) && reqOption.GetScrubSensitiveHeaders() != nil {
+			scrubber = reqOption.GetScrubSensitiveHeaders()
+		}
+	}
 	if scrubber != nil {
 		scrubber(result, request.URL)
 	}
