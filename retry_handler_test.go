@@ -708,6 +708,57 @@ func TestItRetriesWithRequestOptionThatPredatesRetryUnprocessedMutationsOnly(t *
 	assert.Len(t, *methods, 2)
 }
 
+// sendPostThroughRedirect sends a POST through the retry and redirect handlers. The first
+// request is redirected with redirectStatus, the redirected request gets redirectedStatus
+// once, and every later request gets 200. It returns the final status and each request's
+// method and path.
+func sendPostThroughRedirect(t *testing.T, redirectStatus int, redirectedStatus int) (int, []string) {
+	t.Helper()
+	requests := make([]string, 0, 4)
+	redirectedCalls := 0
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		requests = append(requests, req.Method+" "+req.URL.Path)
+		if req.URL.Path == "/redirected" {
+			redirectedCalls++
+			res.Header().Set("Retry-After", "0")
+			if redirectedCalls == 1 {
+				res.WriteHeader(redirectedStatus)
+			} else {
+				res.WriteHeader(200)
+			}
+			return
+		}
+		res.Header().Set("Location", "/redirected")
+		res.WriteHeader(redirectStatus)
+	}))
+	t.Cleanup(testServer.Close)
+	client := &nethttp.Client{Transport: NewCustomTransport(
+		NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true}),
+		NewRedirectHandler(),
+	)}
+
+	resp, err := client.Do(newBufferedRequest(t, nethttp.MethodPost, testServer.URL+"/send"))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	return resp.StatusCode, requests
+}
+
+func TestItDoesntResendPostRedirectedToGetOnUnprocessedStatusWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	// The 303 shows the server accepted the POST; the 503 only describes the redirected GET.
+	status, requests := sendPostThroughRedirect(t, 303, 503)
+
+	assert.Equal(t, 503, status)
+	assert.Equal(t, []string{"POST /send", "GET /redirected"}, requests)
+}
+
+func TestItRetriesPostRedirectedAsPostOnUnprocessedStatusWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	// A 307 keeps the method, so a 503 from the target still means the POST wasn't processed.
+	status, requests := sendPostThroughRedirect(t, 307, 503)
+
+	assert.Equal(t, 200, status)
+	assert.Equal(t, []string{"POST /send", "POST /redirected", "POST /send", "POST /redirected"}, requests)
+}
+
 func TestItDoesntResendRedirectedPostWhenRetryUnprocessedMutationsOnly(t *testing.T) {
 	// The retry handler sits outside the redirect handler and resends the original request,
 	// so a POST whose redirect target returns 504 would be POSTed again.

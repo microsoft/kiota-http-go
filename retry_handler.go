@@ -236,11 +236,18 @@ func (middleware RetryHandler) isRetriableRequest(req *nethttp.Request) bool {
 }
 
 // isRetriableForMethod reports whether the response allows resending the request, given its method.
-// The retry resends req itself, even when a redirect changed the method along the way, so req.Method is the method to check.
+// The retry resends req itself, even when a redirect changed the method along the way, so req.Method is the method to check,
+// and a POST or PATCH that was redirected to another method isn't retried at all.
 func (middleware RetryHandler) isRetriableForMethod(options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response) bool {
 	option, ok := options.(retryUnprocessedMutationsOnlyOption)
 	if !ok || isNilInterface(option) || !option.GetRetryUnprocessedMutationsOnly() || !isNonIdempotentMethod(req.Method) {
 		return true
+	}
+	// A redirect that changed the method (a 301, 302 or 303 turning a POST into a GET) means the
+	// server already accepted the original request. The status then describes the redirected
+	// request, not the original one that a retry would resend.
+	if resp.Request != nil && !strings.EqualFold(resp.Request.Method, req.Method) {
+		return false
 	}
 	// By common service convention, a 429 or 503 means the server didn't process the request,
 	// so resending it is treated as safe. A 504 may arrive after the server already acted on it.
