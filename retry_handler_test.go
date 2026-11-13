@@ -12,6 +12,7 @@ import (
 	testing "testing"
 	"time"
 
+	abs "github.com/microsoft/kiota-abstractions-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -565,3 +566,172 @@ func TestRetryHandlerClosesResponseBodyOnRetry(t *testing.T) {
 	assert.True(t, bodyTracker.closed, "retried response body should be closed")
 }
 
+// newStatusSequenceServer answers each request with the next status code in statusCodes
+// and records the method of every request it receives. Retry-After: 0 keeps retries fast.
+func newStatusSequenceServer(t *testing.T, statusCodes ...int) (*httptest.Server, *[]string) {
+	t.Helper()
+	methods := make([]string, 0, len(statusCodes))
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		methods = append(methods, req.Method)
+		status := 200
+		if len(methods) <= len(statusCodes) {
+			status = statusCodes[len(methods)-1]
+		}
+		res.Header().Set("Retry-After", "0")
+		res.WriteHeader(status)
+	}))
+	t.Cleanup(testServer.Close)
+	return testServer, &methods
+}
+
+func newBufferedRequest(t *testing.T, method string, url string) *nethttp.Request {
+	t.Helper()
+	const body = `{"message":"hello"}`
+	req, err := nethttp.NewRequest(method, url, strings.NewReader(body))
+	require.NoError(t, err)
+	return req
+}
+
+func TestRetryUnprocessedMutationsOnlyDefaultsToFalse(t *testing.T) {
+	assert.False(t, (&RetryHandlerOptions{}).GetRetryUnprocessedMutationsOnly())
+	var nilOptions *RetryHandlerOptions
+	assert.False(t, nilOptions.GetRetryUnprocessedMutationsOnly())
+}
+
+func TestItRetriesNonIdempotentRequestOnGatewayTimeoutByDefault(t *testing.T) {
+	for _, method := range []string{nethttp.MethodPost, nethttp.MethodPatch} {
+		t.Run(method, func(t *testing.T) {
+			testServer, methods := newStatusSequenceServer(t, 504, 200)
+			handler := NewRetryHandler()
+
+			resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, method, testServer.URL))
+
+			require.NoError(t, err)
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.Len(t, *methods, 2)
+		})
+	}
+}
+
+func TestItDoesntRetryNonIdempotentRequestOnGatewayTimeoutWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	for _, method := range []string{nethttp.MethodPost, nethttp.MethodPatch, "post"} {
+		t.Run(method, func(t *testing.T) {
+			testServer, methods := newStatusSequenceServer(t, 504, 200)
+			handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
+
+			resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, method, testServer.URL))
+
+			require.NoError(t, err)
+			assert.Equal(t, 504, resp.StatusCode)
+			assert.Len(t, *methods, 1)
+		})
+	}
+}
+
+func TestItRetriesNonIdempotentRequestWhenNotProcessedAndRetryUnprocessedMutationsOnly(t *testing.T) {
+	for _, method := range []string{nethttp.MethodPost, nethttp.MethodPatch} {
+		for _, status := range []int{429, 503} {
+			t.Run(method+" "+strconv.Itoa(status), func(t *testing.T) {
+				testServer, methods := newStatusSequenceServer(t, status, 200)
+				handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
+
+				resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, method, testServer.URL))
+
+				require.NoError(t, err)
+				assert.Equal(t, 200, resp.StatusCode)
+				assert.Len(t, *methods, 2)
+			})
+		}
+	}
+}
+
+func TestItRetriesIdempotentRequestOnGatewayTimeoutWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	for _, method := range []string{nethttp.MethodGet, nethttp.MethodPut, nethttp.MethodDelete, "QUERY"} {
+		t.Run(method, func(t *testing.T) {
+			testServer, methods := newStatusSequenceServer(t, 504, 200)
+			handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
+
+			resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, method, testServer.URL))
+
+			require.NoError(t, err)
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.Len(t, *methods, 2)
+		})
+	}
+}
+
+func TestItStopsRetryingNonIdempotentRequestWhenALaterResponseLeavesOutcomeUnknown(t *testing.T) {
+	testServer, methods := newStatusSequenceServer(t, 503, 504, 200)
+	handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, newBufferedRequest(t, nethttp.MethodPost, testServer.URL))
+
+	require.NoError(t, err)
+	assert.Equal(t, 504, resp.StatusCode)
+	assert.Len(t, *methods, 2)
+}
+
+func TestItHonoursRetryUnprocessedMutationsOnlyFromRequestOption(t *testing.T) {
+	testServer, methods := newStatusSequenceServer(t, 504, 200)
+	handler := NewRetryHandler()
+	req := newBufferedRequest(t, nethttp.MethodPost, testServer.URL)
+	req = req.WithContext(context.WithValue(req.Context(), retryKeyValue, &RetryHandlerOptions{RetryUnprocessedMutationsOnly: true}))
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, 504, resp.StatusCode)
+	assert.Len(t, *methods, 1)
+}
+
+// legacyRetryOptions implements the retry option methods that existed before
+// RetryUnprocessedMutationsOnly, to check that such types keep working unchanged.
+type legacyRetryOptions struct{}
+
+func (o *legacyRetryOptions) GetKey() abs.RequestOptionKey { return retryKeyValue }
+func (o *legacyRetryOptions) GetShouldRetry() func(time.Duration, int, *nethttp.Request, *nethttp.Response) bool {
+	return func(time.Duration, int, *nethttp.Request, *nethttp.Response) bool { return true }
+}
+func (o *legacyRetryOptions) GetDelaySeconds() int { return 1 }
+func (o *legacyRetryOptions) GetMaxRetries() int   { return 3 }
+
+func TestItRetriesWithRequestOptionThatPredatesRetryUnprocessedMutationsOnly(t *testing.T) {
+	testServer, methods := newStatusSequenceServer(t, 504, 200)
+	handler := NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true})
+	req := newBufferedRequest(t, nethttp.MethodPost, testServer.URL)
+	req = req.WithContext(context.WithValue(req.Context(), retryKeyValue, &legacyRetryOptions{}))
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Len(t, *methods, 2)
+}
+
+func TestItDoesntResendRedirectedPostWhenRetryUnprocessedMutationsOnly(t *testing.T) {
+	// The retry handler sits outside the redirect handler and resends the original request,
+	// so a POST whose redirect target returns 504 would be POSTed again.
+	methods := make([]string, 0, 2)
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		methods = append(methods, req.Method+" "+req.URL.Path)
+		if req.URL.Path == "/redirected" {
+			res.Header().Set("Retry-After", "0")
+			res.WriteHeader(504)
+			return
+		}
+		res.Header().Set("Location", "/redirected")
+		res.WriteHeader(303)
+	}))
+	defer testServer.Close()
+	client := &nethttp.Client{Transport: NewCustomTransport(
+		NewRetryHandlerWithOptions(RetryHandlerOptions{RetryUnprocessedMutationsOnly: true}),
+		NewRedirectHandler(),
+	)}
+
+	resp, err := client.Do(newBufferedRequest(t, nethttp.MethodPost, testServer.URL+"/send"))
+
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, 504, resp.StatusCode)
+	assert.Equal(t, []string{"POST /send", "GET /redirected"}, methods)
+}

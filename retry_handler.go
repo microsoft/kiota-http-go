@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	nethttp "net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	abs "github.com/microsoft/kiota-abstractions-go"
@@ -50,6 +51,15 @@ type RetryHandlerOptions struct {
 	MaxRetries int
 	// The delay in seconds between retries
 	DelaySeconds int
+	// Whether POST and PATCH requests are retried only after a response showing the server didn't process them. This defaults to false.
+	//
+	// POST and PATCH aren't idempotent, so resending one the server already processed can repeat its side effect, such as sending an email twice.
+	// A 504 can arrive after the server processed the request.
+	// When this is true, POST and PATCH requests are retried only after a 429 or 503 response, and a 504 is returned to the caller.
+	// This relies on the common service convention, followed by Microsoft Graph, that a 429 or 503 response means the server didn't process the request.
+	// HTTP doesn't guarantee this, so a service that returns 429 or 503 after acting on a request can still see it repeated.
+	// PUT and DELETE also change state, but they're idempotent, so they aren't affected, and neither are other methods.
+	RetryUnprocessedMutationsOnly bool
 }
 
 type retryHandlerOptionsInt interface {
@@ -57,6 +67,12 @@ type retryHandlerOptionsInt interface {
 	GetShouldRetry() func(delay time.Duration, executionCount int, request *nethttp.Request, response *nethttp.Response) bool
 	GetDelaySeconds() int
 	GetMaxRetries() int
+}
+
+// retryUnprocessedMutationsOnlyOption is checked separately from retryHandlerOptionsInt,
+// so that option types written for the existing interface keep satisfying it.
+type retryUnprocessedMutationsOnlyOption interface {
+	GetRetryUnprocessedMutationsOnly() bool
 }
 
 var retryKeyValue = abs.RequestOptionKey{
@@ -87,6 +103,14 @@ func (options *RetryHandlerOptions) GetDelaySeconds() int {
 	} else {
 		return options.DelaySeconds
 	}
+}
+
+// GetRetryUnprocessedMutationsOnly returns whether POST and PATCH requests are retried only after a 429 or 503 response
+func (options *RetryHandlerOptions) GetRetryUnprocessedMutationsOnly() bool {
+	if options == nil {
+		return false
+	}
+	return options.RetryUnprocessedMutationsOnly
 }
 
 // GetMaxRetries returns the maximum number of times a request can be retried
@@ -147,6 +171,7 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 	}
 	if middleware.isRetriableErrorCode(resp.StatusCode) &&
 		middleware.isRetriableRequest(req) &&
+		middleware.isRetriableForMethod(options, req, resp) &&
 		executionCount < options.GetMaxRetries() &&
 		cumulativeDelay < time.Duration(absoluteMaxDelaySeconds)*time.Second &&
 		options.GetShouldRetry()(cumulativeDelay, executionCount, req, resp) {
@@ -208,6 +233,22 @@ func (middleware RetryHandler) isRetriableRequest(req *nethttp.Request) bool {
 		return req.ContentLength != -1
 	}
 	return true
+}
+
+// isRetriableForMethod reports whether the response allows resending the request, given its method.
+// The retry resends req itself, even when a redirect changed the method along the way, so req.Method is the method to check.
+func (middleware RetryHandler) isRetriableForMethod(options retryHandlerOptionsInt, req *nethttp.Request, resp *nethttp.Response) bool {
+	option, ok := options.(retryUnprocessedMutationsOnlyOption)
+	if !ok || isNilInterface(option) || !option.GetRetryUnprocessedMutationsOnly() || !isNonIdempotentMethod(req.Method) {
+		return true
+	}
+	// By common service convention, a 429 or 503 means the server didn't process the request,
+	// so resending it is treated as safe. A 504 may arrive after the server already acted on it.
+	return resp.StatusCode == tooManyRequests || resp.StatusCode == serviceUnavailable
+}
+
+func isNonIdempotentMethod(method string) bool {
+	return strings.EqualFold(method, nethttp.MethodPost) || strings.EqualFold(method, nethttp.MethodPatch)
 }
 
 func (middleware RetryHandler) getRetryDelay(req *nethttp.Request, resp *nethttp.Response, options retryHandlerOptionsInt, executionCount int) time.Duration {
