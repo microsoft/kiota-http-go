@@ -354,3 +354,26 @@ func TestHeadersInspectionOptionsNilReceiverDoesNotPanic(t *testing.T) {
 		assert.Equal(t, headersInspectionKeyValue, options.GetKey())
 	})
 }
+
+func TestHeadersInspectionTypedNilOptionInContext(t *testing.T) {
+	handler := NewHeadersInspectionHandler()
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+
+	var nilOpt *HeadersInspectionOptions
+	ctx := context.WithValue(req.Context(), headersInspectionKeyValue, nilOpt)
+	req = req.WithContext(ctx)
+
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	})
+}
