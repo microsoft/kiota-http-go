@@ -40,21 +40,33 @@ var headersInspectionKeyValue = abstractions.RequestOptionKey{
 
 // GetInspectRequestHeaders returns true if the request headers should be inspected
 func (o *HeadersInspectionOptions) GetInspectRequestHeaders() bool {
+	if o == nil {
+		return false
+	}
 	return o.InspectRequestHeaders
 }
 
 // GetInspectResponseHeaders returns true if the response headers should be inspected
 func (o *HeadersInspectionOptions) GetInspectResponseHeaders() bool {
+	if o == nil {
+		return false
+	}
 	return o.InspectResponseHeaders
 }
 
 // GetRequestHeaders returns the request headers
 func (o *HeadersInspectionOptions) GetRequestHeaders() *abstractions.RequestHeaders {
+	if o == nil {
+		return nil
+	}
 	return o.RequestHeaders
 }
 
 // GetResponseHeaders returns the response headers
 func (o *HeadersInspectionOptions) GetResponseHeaders() *abstractions.ResponseHeaders {
+	if o == nil {
+		return nil
+	}
 	return o.ResponseHeaders
 }
 
@@ -95,7 +107,7 @@ func (middleware HeadersInspectionHandler) Intercept(pipeline Pipeline, middlewa
 		req = req.WithContext(ctx)
 	}
 	reqOption, ok := req.Context().Value(headersInspectionKeyValue).(headersInspectionOptionsInt)
-	if !ok || reqOption == nil {
+	if !ok || isNilInterface(reqOption) {
 		reqOption = &middleware.options
 	}
 	if reqOption.GetInspectRequestHeaders() && reqOption.GetRequestHeaders() != nil {

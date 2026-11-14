@@ -150,7 +150,7 @@ func (middleware RetryHandler) Intercept(pipeline Pipeline, middlewareIndex int,
 		return response, err
 	}
 	reqOption, ok := req.Context().Value(retryKeyValue).(retryHandlerOptionsInt)
-	if !ok {
+	if !ok || isNilInterface(reqOption) {
 		reqOption = &middleware.options
 	}
 	response, err = middleware.retryRequest(ctx, pipeline, middlewareIndex, reqOption, req, response, 0, 0, observabilityName)
@@ -198,6 +198,7 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 		t := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			// Return without retrying if the context was cancelled.
 			if attemptSpan != nil {
 				attemptSpan.RecordError(ctx.Err())

@@ -102,9 +102,16 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 	}
 
 	req.URL.Path = ReplacePathTokens(req.URL.Path, reqOption.GetReplacementPairs())
+	if req.URL.RawPath != "" {
+		req.URL.RawPath = ReplacePathTokens(req.URL.RawPath, reqOption.GetReplacementPairs())
+	}
 
 	if span != nil {
-		span.SetAttributes(attribute.String("http.request_url", req.RequestURI))
+		reqURI := req.RequestURI
+		if reqURI == "" && req.URL != nil {
+			reqURI = req.URL.String()
+		}
+		span.SetAttributes(attribute.String("http.request_url", reqURI))
 	}
 
 	response, err := pipeline.Next(req, middlewareIndex)

@@ -761,3 +761,46 @@ func TestItDoesntResendRedirectedPostWhenRetryUnprocessedMutationsOnly(t *testin
 	assert.Equal(t, 504, resp.StatusCode)
 	assert.Equal(t, []string{"POST /send", "GET /redirected"}, methods)
 }
+
+func TestRetryHandlerTypedNilOptionInContext(t *testing.T) {
+	testServer, methods := newStatusSequenceServer(t, 503, 200)
+	handler := NewRetryHandlerWithOptions(RetryHandlerOptions{
+		MaxRetries:   2,
+		DelaySeconds: 0,
+	})
+	req := newBufferedRequest(t, nethttp.MethodGet, testServer.URL)
+	var nilOpts *RetryHandlerOptions
+	req = req.WithContext(context.WithValue(req.Context(), retryKeyValue, nilOpts))
+
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Len(t, *methods, 2)
+}
+
+func TestRetryHandlerTimerStoppedOnContextCancellation(t *testing.T) {
+	testServer := httptest.NewServer(nethttp.HandlerFunc(func(res nethttp.ResponseWriter, req *nethttp.Request) {
+		res.Header().Set("Retry-After", "10")
+		res.WriteHeader(nethttp.StatusServiceUnavailable)
+	}))
+	defer testServer.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	handler := NewRetryHandler()
+	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, testServer.URL, nil)
+	require.NoError(t, err)
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
+	elapsed := time.Since(start)
+
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, resp)
+	assert.Less(t, elapsed, 2*time.Second)
+}
