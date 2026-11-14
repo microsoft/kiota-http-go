@@ -343,3 +343,14 @@ func TestHeadersInspectionPipelineErrorWithoutObservabilityOptions(t *testing.T)
 	assert.ErrorIs(t, err, expectedErr)
 	assert.Nil(t, resp)
 }
+
+func TestHeadersInspectionOptionsNilReceiverDoesNotPanic(t *testing.T) {
+	var options *HeadersInspectionOptions
+	assert.NotPanics(t, func() {
+		assert.False(t, options.GetInspectRequestHeaders())
+		assert.False(t, options.GetInspectResponseHeaders())
+		assert.Nil(t, options.GetRequestHeaders())
+		assert.Nil(t, options.GetResponseHeaders())
+		assert.Equal(t, headersInspectionKeyValue, options.GetKey())
+	})
+}
