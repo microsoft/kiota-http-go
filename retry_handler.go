@@ -198,6 +198,7 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 		t := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			// Return without retrying if the context was cancelled.
 			if attemptSpan != nil {
 				attemptSpan.RecordError(ctx.Err())
