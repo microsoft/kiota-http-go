@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCompressionHandlerAddsAcceptEncodingHeader(t *testing.T) {
@@ -229,5 +230,50 @@ func TestCompressionHandlerCloses415ResponseBodyOnRetry(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
 	assert.True(t, bodyTracker.closed, "415 response body should be closed on retry")
+}
+
+func TestCompressionHandlerPreservesSeekableBodyOn415Retry(t *testing.T) {
+	handler := NewCompressionHandler()
+	payload := "payload data that needs to be seekable"
+	req, err := nethttp.NewRequest(nethttp.MethodPost, "https://example.com/test", strings.NewReader(payload))
+	require.NoError(t, err)
+
+	callCount := 0
+	pipeline := &dynamicPipeline{
+		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
+			callCount++
+			if callCount == 1 {
+				return &nethttp.Response{
+					StatusCode: 415,
+					Header:     nethttp.Header{},
+					Body:       io.NopCloser(strings.NewReader("")),
+				}, nil
+			}
+			// On the retried request, verify body implements io.Seeker and can be rewound
+			seeker, ok := r.Body.(io.Seeker)
+			assert.True(t, ok, "retried uncompressed request body must implement io.Seeker")
+			if ok {
+				readBody, readErr := io.ReadAll(r.Body)
+				assert.NoError(t, readErr)
+				assert.Equal(t, payload, string(readBody))
+
+				// Rewind and read again to ensure seeking works
+				_, seekErr := seeker.Seek(0, io.SeekStart)
+				assert.NoError(t, seekErr)
+				readBody2, readErr2 := io.ReadAll(r.Body)
+				assert.NoError(t, readErr2)
+				assert.Equal(t, payload, string(readBody2))
+			}
+			return &nethttp.Response{
+				StatusCode: nethttp.StatusOK,
+				Header:     nethttp.Header{},
+			}, nil
+		},
+	}
+
+	resp, err := handler.Intercept(pipeline, 0, req)
+	require.NoError(t, err)
+	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	assert.Equal(t, 2, callCount)
 }
 
