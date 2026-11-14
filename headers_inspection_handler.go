@@ -107,7 +107,7 @@ func (middleware HeadersInspectionHandler) Intercept(pipeline Pipeline, middlewa
 		req = req.WithContext(ctx)
 	}
 	reqOption, ok := req.Context().Value(headersInspectionKeyValue).(headersInspectionOptionsInt)
-	if !ok || reqOption == nil {
+	if !ok || isNilInterface(reqOption) {
 		reqOption = &middleware.options
 	}
 	if reqOption.GetInspectRequestHeaders() && reqOption.GetRequestHeaders() != nil {
