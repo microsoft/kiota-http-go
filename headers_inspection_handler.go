@@ -40,21 +40,33 @@ var headersInspectionKeyValue = abstractions.RequestOptionKey{
 
 // GetInspectRequestHeaders returns true if the request headers should be inspected
 func (o *HeadersInspectionOptions) GetInspectRequestHeaders() bool {
+	if o == nil {
+		return false
+	}
 	return o.InspectRequestHeaders
 }
 
 // GetInspectResponseHeaders returns true if the response headers should be inspected
 func (o *HeadersInspectionOptions) GetInspectResponseHeaders() bool {
+	if o == nil {
+		return false
+	}
 	return o.InspectResponseHeaders
 }
 
 // GetRequestHeaders returns the request headers
 func (o *HeadersInspectionOptions) GetRequestHeaders() *abstractions.RequestHeaders {
+	if o == nil {
+		return nil
+	}
 	return o.RequestHeaders
 }
 
 // GetResponseHeaders returns the response headers
 func (o *HeadersInspectionOptions) GetResponseHeaders() *abstractions.ResponseHeaders {
+	if o == nil {
+		return nil
+	}
 	return o.ResponseHeaders
 }
 
