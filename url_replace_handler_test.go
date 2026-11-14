@@ -3,9 +3,11 @@ package nethttplibrary
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/assert"
 	nethttp "net/http"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel"
 )
 
 type SpyPipeline struct {
@@ -113,4 +115,64 @@ func TestUrlReplaceHandlerTypedNilOptionInContext(t *testing.T) {
 		assert.NotNil(t, pipeline.receivedRequest)
 		assert.Equal(t, "/me", pipeline.receivedRequest.URL.Path)
 	})
+}
+
+func TestUrlReplaceHandlerSynchronizesRawPath(t *testing.T) {
+	handler := NewUrlReplaceHandler(true, map[string]string{
+		"/users/token-to-replace":     "/me",
+		"/users/token%2Dto%2Dreplace": "/me",
+	})
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/users/token-to-replace/items", nil)
+	assert.NoError(t, err)
+	req.URL.RawPath = "/users/token%2Dto%2Dreplace/items"
+
+	pipeline := newSpyPipeline()
+	_, _ = handler.Intercept(pipeline, 0, req)
+
+	assert.Equal(t, "/me/items", pipeline.GetReceivedRequest().URL.Path)
+	assert.Equal(t, "/me/items", pipeline.GetReceivedRequest().URL.RawPath)
+}
+
+func TestUrlReplaceHandlerSpanRecordsURLWhenRequestURIEmpty(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+
+	handler := NewUrlReplaceHandler(true, map[string]string{"/users/token-to-replace": "/me"})
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/users/token-to-replace", nil)
+	assert.NoError(t, err)
+
+	obsOptions := &ObservabilityOptions{}
+	ctx := context.WithValue(req.Context(), observabilityOptionsKeyValue, obsOptions)
+	req = req.WithContext(ctx)
+
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
+	resp, err := handler.Intercept(pipeline, 0, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	tracer, ok := tracerProvider.tracers[obsOptions.GetTracerInstrumentationName()]
+	assert.True(t, ok)
+	assert.NotEmpty(t, tracer.spans)
+
+	var replaceSpan *recordingSpan
+	for _, s := range tracer.spans {
+		if s.name == "UrlReplaceHandler_Intercept" {
+			replaceSpan = s
+			break
+		}
+	}
+	assert.NotNil(t, replaceSpan)
+	foundURL := false
+	for _, attr := range replaceSpan.attributes {
+		if attr.Key == "http.request_url" {
+			foundURL = true
+			assert.Equal(t, "https://example.com/me", attr.Value.AsString())
+		}
+	}
+	assert.True(t, foundURL, "http.request_url attribute should be set with replaced URL")
 }
