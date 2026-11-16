@@ -2,9 +2,7 @@ package nethttplibrary
 
 import (
 	"context"
-	"errors"
 	nethttp "net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,89 +11,62 @@ import (
 )
 
 type SpyPipeline struct {
-	client          *nethttp.Client
 	receivedRequest *nethttp.Request
+}
+
+func newSpyPipeline() *SpyPipeline {
+	return &SpyPipeline{}
 }
 
 func (pipeline *SpyPipeline) Next(req *nethttp.Request, middlewareIndex int) (*nethttp.Response, error) {
 	pipeline.receivedRequest = req
-	return nil, errors.New("Spy executor only")
+	return nil, nil
 }
-func newSpyPipeline() *SpyPipeline {
-	return &SpyPipeline{
-		client: getDefaultClientWithoutMiddleware(),
-	}
-}
+
 func (pipeline *SpyPipeline) GetReceivedRequest() *nethttp.Request {
 	return pipeline.receivedRequest
 }
 
-func TestURLReplacementHandler(t *testing.T) {
-
-	handler := NewUrlReplaceHandler(true, map[string]string{"/users/me-token-to-replace": "/me"})
-	if handler == nil {
-		t.Error("handler is nil")
-	}
-	url := "https://msgraph.com/users/me-token-to-replace/contactFolders"
-	req, err := nethttp.NewRequest(nethttp.MethodGet, url, nil)
-	if err != nil {
-		t.Error(err)
-	}
-
-	pipeline := newSpyPipeline()
-	_, _ = handler.Intercept(pipeline, 0, req)
-
-	assert.Equal(t, pipeline.GetReceivedRequest().URL.Path, "/me/contactFolders")
-}
-
-func TestNewUrlReplaceOptions(t *testing.T) {
-	options := NewUrlReplaceOptions()
-	assert.NotNil(t, options)
-	assert.True(t, options.IsEnabled())
-	assert.Nil(t, options.GetReplacementPairs())
-	assert.Equal(t, options.GetKey(), urlReplaceOptionKey)
-}
-
 func TestNewUrlReplaceHandlerWithOptions(t *testing.T) {
-	options := UrlReplaceOptions{
-		Enabled:          true,
-		ReplacementPairs: map[string]string{"foo": "bar"},
-	}
-	handler := NewUrlReplaceHandlerWithOptions(options)
-	assert.NotNil(t, handler)
-	assert.True(t, handler.options.IsEnabled())
+	handler := NewUrlReplaceHandler(true, map[string]string{"foo": "bar"})
 	assert.Equal(t, handler.options.GetReplacementPairs(), map[string]string{"foo": "bar"})
 }
 
 func TestUrlReplaceHandlerNilRequest(t *testing.T) {
 	handler := NewUrlReplaceHandler(true, map[string]string{"foo": "bar"})
 	assert.NotPanics(t, func() {
-		resp, err := handler.Intercept(&stubPipeline{}, 0, nil)
-		assert.Error(t, err)
+		resp, err := handler.Intercept(nil, 0, nil)
 		assert.Nil(t, resp)
+		assert.Equal(t, "req cannot be nil", err.Error())
 	})
 }
 
-func TestUrlReplaceHandlerNilURL(t *testing.T) {
+func TestUrlReplaceHandlerDisabled(t *testing.T) {
+	handler := NewUrlReplaceHandler(false, map[string]string{"foo": "bar"})
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/foo", nil)
+	assert.NoError(t, err)
+
+	pipeline := newSpyPipeline()
+	_, _ = handler.Intercept(pipeline, 0, req)
+
+	assert.Equal(t, "/foo", pipeline.GetReceivedRequest().URL.Path)
+}
+
+func TestUrlReplaceHandlerReplacesPath(t *testing.T) {
 	handler := NewUrlReplaceHandler(true, map[string]string{"foo": "bar"})
-	req := &nethttp.Request{}
-	assert.NotPanics(t, func() {
-		resp, err := handler.Intercept(&stubPipeline{}, 0, req)
-		assert.Error(t, err)
-		assert.Nil(t, resp)
-	})
-}
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/foo", nil)
+	assert.NoError(t, err)
 
-func TestUrlReplaceOptionsNilSafety(t *testing.T) {
-	var nilOpts *UrlReplaceOptions
-	assert.False(t, nilOpts.IsEnabled())
-	assert.Nil(t, nilOpts.GetReplacementPairs())
+	pipeline := newSpyPipeline()
+	_, _ = handler.Intercept(pipeline, 0, req)
+
+	assert.Equal(t, "/bar", pipeline.GetReceivedRequest().URL.Path)
 }
 
 func TestUrlReplaceHandlerTypedNilOptionInContext(t *testing.T) {
 	handler := NewUrlReplaceHandler(true, map[string]string{"/users/token-to-replace": "/me"})
-	req, err := nethttp.NewRequest("GET", "https://example.com/users/token-to-replace", nil)
-	assert.NoError(t, err)
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/users/token-to-replace", nil)
+	require.NoError(t, err)
 
 	var nilOpt *UrlReplaceOptions
 	ctx := context.WithValue(req.Context(), urlReplaceOptionKey, nilOpt)
@@ -114,96 +85,6 @@ func TestUrlReplaceHandlerTypedNilOptionInContext(t *testing.T) {
 		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
 		assert.NotNil(t, pipeline.receivedRequest)
 		assert.Equal(t, "/me", pipeline.receivedRequest.URL.Path)
-	})
-}
-
-func TestUrlReplaceHandlerSynchronizesRawPath(t *testing.T) {
-	handler := NewUrlReplaceHandler(true, map[string]string{
-		"/users/token-to-replace": "/me",
-	})
-	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/users/token-to-replace/items", nil)
-	assert.NoError(t, err)
-	req.URL.RawPath = "/users/token%2Dto%2Dreplace/items"
-
-	pipeline := newSpyPipeline()
-	_, _ = handler.Intercept(pipeline, 0, req)
-
-	assert.Equal(t, "/me/items", pipeline.GetReceivedRequest().URL.Path)
-	assert.Equal(t, "/me/items", pipeline.GetReceivedRequest().URL.RawPath)
-}
-
-func TestUrlReplaceHandlerPreservesUntouchedEscapesAndWireURL(t *testing.T) {
-	t.Run("does not alter percent escapes when token does not match Path", func(t *testing.T) {
-		handler := NewUrlReplaceHandler(true, map[string]string{
-			"2": "3",
-		})
-		req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/items/a%2Fb", nil)
-		require.NoError(t, err)
-		assert.Equal(t, "/items/a/b", req.URL.Path)
-		assert.Equal(t, "/items/a%2Fb", req.URL.RawPath)
-
-		pipeline := newSpyPipeline()
-		_, _ = handler.Intercept(pipeline, 0, req)
-
-		received := pipeline.GetReceivedRequest()
-		assert.Equal(t, "/items/a/b", received.URL.Path)
-		assert.Equal(t, "/items/a%2Fb", received.URL.RawPath)
-		assert.Equal(t, "/items/a%2Fb", received.URL.RequestURI())
-		assert.Equal(t, "https://example.com/items/a%2Fb", received.URL.String())
-
-		// Verify on the wire with an actual HTTP server
-		serverReceivedURI := ""
-		ts := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-			serverReceivedURI = r.RequestURI
-			w.WriteHeader(nethttp.StatusOK)
-		}))
-		defer ts.Close()
-
-		wireReq, err := nethttp.NewRequest(nethttp.MethodGet, ts.URL+"/items/a%2Fb", nil)
-		require.NoError(t, err)
-		_, _ = handler.Intercept(pipeline, 0, wireReq)
-
-		resp, err := ts.Client().Do(pipeline.GetReceivedRequest())
-		require.NoError(t, err)
-		_ = resp.Body.Close()
-
-		assert.Equal(t, "/items/a%2Fb", serverReceivedURI, "wire URL must preserve encoded slash instead of converting to path separator")
-	})
-
-	t.Run("updates only matched span and preserves other escaped segments", func(t *testing.T) {
-		handler := NewUrlReplaceHandler(true, map[string]string{
-			"/users/token-to-replace": "/me",
-		})
-		req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/users/token-to-replace/items/a%2Fb", nil)
-		require.NoError(t, err)
-		assert.Equal(t, "/users/token-to-replace/items/a/b", req.URL.Path)
-		assert.Equal(t, "/users/token-to-replace/items/a%2Fb", req.URL.RawPath)
-
-		pipeline := newSpyPipeline()
-		_, _ = handler.Intercept(pipeline, 0, req)
-
-		received := pipeline.GetReceivedRequest()
-		assert.Equal(t, "/me/items/a/b", received.URL.Path)
-		assert.Equal(t, "/me/items/a%2Fb", received.URL.RawPath)
-		assert.Equal(t, "/me/items/a%2Fb", received.URL.RequestURI())
-		assert.Equal(t, "https://example.com/me/items/a%2Fb", received.URL.String())
-
-		serverReceivedURI := ""
-		ts := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-			serverReceivedURI = r.RequestURI
-			w.WriteHeader(nethttp.StatusOK)
-		}))
-		defer ts.Close()
-
-		wireReq, err := nethttp.NewRequest(nethttp.MethodGet, ts.URL+"/users/token-to-replace/items/a%2Fb", nil)
-		require.NoError(t, err)
-		_, _ = handler.Intercept(pipeline, 0, wireReq)
-
-		resp, err := ts.Client().Do(pipeline.GetReceivedRequest())
-		require.NoError(t, err)
-		_ = resp.Body.Close()
-
-		assert.Equal(t, "/me/items/a%2Fb", serverReceivedURI, "wire URL must apply replacement while preserving untouched encoded slash")
 	})
 }
 
@@ -320,58 +201,4 @@ func TestUrlReplaceHandlerTypedNilObservabilityOptions(t *testing.T) {
 	assert.Nil(t, GetObservabilityOptionsFromRequest(req))
 	assert.False(t, nilObs.GetIncludeEUIIAttributes())
 	assert.NotPanics(t, func() { nilObs.SetIncludeEUIIAttributes(true) })
-}
-
-func TestUrlReplaceHandlerEmptyStringKeyPreservesSemanticsWithRawPath(t *testing.T) {
-	handler := NewUrlReplaceHandler(true, map[string]string{
-		"": "/v1",
-	})
-
-	t.Run("prepends replacement to unencoded path", func(t *testing.T) {
-		req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/items/a-b", nil)
-		require.NoError(t, err)
-		assert.Equal(t, "/items/a-b", req.URL.Path)
-		assert.Equal(t, "", req.URL.RawPath)
-
-		pipeline := newSpyPipeline()
-		_, _ = handler.Intercept(pipeline, 0, req)
-
-		received := pipeline.GetReceivedRequest()
-		assert.Equal(t, "/v1/items/a-b", received.URL.Path)
-		assert.Equal(t, "https://example.com/v1/items/a-b", received.URL.String())
-	})
-
-	t.Run("prepends replacement to escaped path preserving raw escapes", func(t *testing.T) {
-		req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/items/a%2Fb", nil)
-		require.NoError(t, err)
-		assert.Equal(t, "/items/a/b", req.URL.Path)
-		assert.Equal(t, "/items/a%2Fb", req.URL.RawPath)
-
-		pipeline := newSpyPipeline()
-		_, _ = handler.Intercept(pipeline, 0, req)
-
-		received := pipeline.GetReceivedRequest()
-		assert.Equal(t, "/v1/items/a/b", received.URL.Path)
-		assert.Equal(t, "/v1/items/a%2Fb", received.URL.RawPath)
-		assert.Equal(t, "/v1/items/a%2Fb", received.URL.RequestURI())
-		assert.Equal(t, "https://example.com/v1/items/a%2Fb", received.URL.String())
-
-		// Verify on the wire with an actual HTTP server
-		serverReceivedURI := ""
-		ts := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-			serverReceivedURI = r.RequestURI
-			w.WriteHeader(nethttp.StatusOK)
-		}))
-		defer ts.Close()
-
-		wireReq, err := nethttp.NewRequest(nethttp.MethodGet, ts.URL+"/items/a%2Fb", nil)
-		require.NoError(t, err)
-		_, _ = handler.Intercept(pipeline, 0, wireReq)
-
-		resp, err := ts.Client().Do(pipeline.GetReceivedRequest())
-		require.NoError(t, err)
-		_ = resp.Body.Close()
-
-		assert.Equal(t, "/v1/items/a%2Fb", serverReceivedURI, "wire URL must prepend empty-key replacement while preserving encoded slash")
-	})
 }

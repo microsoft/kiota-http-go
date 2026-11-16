@@ -763,7 +763,7 @@ func TestItDoesntResendRedirectedPostWhenRetryUnprocessedMutationsOnly(t *testin
 }
 
 func TestRetryHandlerTypedNilOptionInContext(t *testing.T) {
-	testServer, methods := newStatusSequenceServer(t, 503, 200)
+	testServer, methods := newStatusSequenceServer(t, 503, 503, 503, 503)
 	handler := NewRetryHandlerWithOptions(RetryHandlerOptions{
 		MaxRetries:   2,
 		DelaySeconds: 0,
@@ -775,8 +775,8 @@ func TestRetryHandlerTypedNilOptionInContext(t *testing.T) {
 	resp, err := handler.Intercept(newNoopPipeline(), 0, req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, 200, resp.StatusCode)
-	assert.Len(t, *methods, 2)
+	assert.Equal(t, 503, resp.StatusCode)
+	assert.Len(t, *methods, 3, "must exhaust configured MaxRetries=2 (1 initial + 2 retries) instead of nil receiver default MaxRetries=3")
 }
 
 func TestRetryHandlerTimerStoppedOnContextCancellation(t *testing.T) {

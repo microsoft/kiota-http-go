@@ -2,13 +2,13 @@ package nethttplibrary
 
 import (
 	"errors"
+	"net/http"
+	"strings"
+
 	abstractions "github.com/microsoft/kiota-abstractions-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"net/http"
-	"net/url"
-	"strings"
 )
 
 var urlReplaceOptionKey = abstractions.RequestOptionKey{Key: "UrlReplaceOptionKey"}
@@ -102,11 +102,7 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 		return response, err
 	}
 
-	if req.URL.RawPath == "" {
-		req.URL.Path = ReplacePathTokens(req.URL.Path, reqOption.GetReplacementPairs())
-	} else {
-		req.URL.Path, req.URL.RawPath = replacePathAndRawPath(req.URL.Path, req.URL.RawPath, reqOption.GetReplacementPairs())
-	}
+	req.URL.Path = ReplacePathTokens(req.URL.Path, reqOption.GetReplacementPairs())
 
 	if span != nil && obsOptions != nil && !isNilInterface(obsOptions) && obsOptions.GetIncludeEUIIAttributes() {
 		reqURI := req.RequestURI
@@ -129,67 +125,4 @@ func ReplacePathTokens(path string, replacementPairs map[string]string) string {
 		path = strings.Replace(path, key, value, 1)
 	}
 	return path
-}
-
-func replacePathAndRawPath(path, rawPath string, replacementPairs map[string]string) (string, string) {
-	for key, value := range replacementPairs {
-		idx := strings.Index(path, key)
-		if idx == -1 {
-			continue
-		}
-		indices, ok := mapPathToRawIndices(path, rawPath)
-		if !ok {
-			path = strings.Replace(path, key, value, 1)
-			continue
-		}
-		rawStart := indices[idx]
-		rawEnd := indices[idx+len(key)]
-		path = path[:idx] + value + path[idx+len(key):]
-		rawValue := (&url.URL{Path: value}).EscapedPath()
-		rawPath = rawPath[:rawStart] + rawValue + rawPath[rawEnd:]
-	}
-	return path, rawPath
-}
-
-func mapPathToRawIndices(path, rawPath string) ([]int, bool) {
-	indices := make([]int, len(path)+1)
-	r, p := 0, 0
-	for p < len(path) && r < len(rawPath) {
-		indices[p] = r
-		if rawPath[r] == '%' && r+2 < len(rawPath) && isHex(rawPath[r+1]) && isHex(rawPath[r+2]) {
-			val := (unhex(rawPath[r+1]) << 4) | unhex(rawPath[r+2])
-			if path[p] != val {
-				return nil, false
-			}
-			r += 3
-			p++
-		} else {
-			if path[p] != rawPath[r] {
-				return nil, false
-			}
-			r++
-			p++
-		}
-	}
-	if p != len(path) || r != len(rawPath) {
-		return nil, false
-	}
-	indices[len(path)] = len(rawPath)
-	return indices, true
-}
-
-func isHex(c byte) bool {
-	return ('0' <= c && c <= '9') || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
-}
-
-func unhex(c byte) byte {
-	switch {
-	case '0' <= c && c <= '9':
-		return c - '0'
-	case 'a' <= c && c <= 'f':
-		return c - 'a' + 10
-	case 'A' <= c && c <= 'F':
-		return c - 'A' + 10
-	}
-	return 0
 }
