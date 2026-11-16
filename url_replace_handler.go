@@ -87,7 +87,7 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 	obsOptions := GetObservabilityOptionsFromRequest(req)
 	ctx := req.Context()
 	var span trace.Span
-	if obsOptions != nil {
+	if obsOptions != nil && !isNilInterface(obsOptions) {
 		ctx, span = otel.GetTracerProvider().Tracer(obsOptions.GetTracerInstrumentationName()).Start(ctx, "UrlReplaceHandler_Intercept")
 		span.SetAttributes(attribute.Bool("com.microsoft.kiota.handler.url_replacer.enable", true))
 		defer span.End()
@@ -108,7 +108,7 @@ func (c *UrlReplaceHandler) Intercept(pipeline Pipeline, middlewareIndex int, re
 		req.URL.Path, req.URL.RawPath = replacePathAndRawPath(req.URL.Path, req.URL.RawPath, reqOption.GetReplacementPairs())
 	}
 
-	if span != nil && obsOptions != nil && obsOptions.GetIncludeEUIIAttributes() {
+	if span != nil && obsOptions != nil && !isNilInterface(obsOptions) && obsOptions.GetIncludeEUIIAttributes() {
 		reqURI := req.RequestURI
 		if reqURI == "" && req.URL != nil {
 			reqURI = req.URL.String()
@@ -133,9 +133,6 @@ func ReplacePathTokens(path string, replacementPairs map[string]string) string {
 
 func replacePathAndRawPath(path, rawPath string, replacementPairs map[string]string) (string, string) {
 	for key, value := range replacementPairs {
-		if key == "" {
-			continue
-		}
 		idx := strings.Index(path, key)
 		if idx == -1 {
 			continue

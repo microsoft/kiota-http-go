@@ -19,11 +19,17 @@ func (o *ObservabilityOptions) GetTracerInstrumentationName() string {
 
 // GetIncludeEUIIAttributes returns whether to include attributes which could contains EUII information
 func (o *ObservabilityOptions) GetIncludeEUIIAttributes() bool {
+	if o == nil {
+		return false
+	}
 	return o.IncludeEUIIAttributes
 }
 
 // SetIncludeEUIIAttributes set whether to include attributes which could contains EUII information
 func (o *ObservabilityOptions) SetIncludeEUIIAttributes(value bool) {
+	if o == nil {
+		return
+	}
 	o.IncludeEUIIAttributes = value
 }
 
@@ -45,7 +51,7 @@ var observabilityOptionsKeyValue = abs.RequestOptionKey{
 
 // GetObservabilityOptionsFromRequest returns the observability options from the request context
 func GetObservabilityOptionsFromRequest(req *nethttp.Request) ObservabilityOptionsInt {
-	if options, ok := req.Context().Value(observabilityOptionsKeyValue).(ObservabilityOptionsInt); ok {
+	if options, ok := req.Context().Value(observabilityOptionsKeyValue).(ObservabilityOptionsInt); ok && !isNilInterface(options) {
 		return options
 	}
 	return nil

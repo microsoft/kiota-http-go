@@ -289,3 +289,89 @@ func TestUrlReplaceHandlerSpanRecordsURLWhenRequestURIEmpty(t *testing.T) {
 		assert.True(t, foundURL, "http.request_url attribute should be set with replaced URL when IncludeEUIIAttributes is true")
 	})
 }
+
+func TestUrlReplaceHandlerTypedNilObservabilityOptions(t *testing.T) {
+	tracerProvider := newRecordingTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(tracerProvider)
+	defer otel.SetTracerProvider(prevProvider)
+
+	handler := NewUrlReplaceHandler(true, map[string]string{"/users/token-to-replace": "/me"})
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/users/token-to-replace", nil)
+	require.NoError(t, err)
+
+	var nilObs *ObservabilityOptions
+	ctx := context.WithValue(req.Context(), observabilityOptionsKeyValue, nilObs)
+	req = req.WithContext(ctx)
+
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     nethttp.Header{},
+		},
+	}
+
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+	})
+
+	assert.Nil(t, GetObservabilityOptionsFromRequest(req))
+	assert.False(t, nilObs.GetIncludeEUIIAttributes())
+	assert.NotPanics(t, func() { nilObs.SetIncludeEUIIAttributes(true) })
+}
+
+func TestUrlReplaceHandlerEmptyStringKeyPreservesSemanticsWithRawPath(t *testing.T) {
+	handler := NewUrlReplaceHandler(true, map[string]string{
+		"": "/v1",
+	})
+
+	t.Run("prepends replacement to unencoded path", func(t *testing.T) {
+		req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/items/a-b", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "/items/a-b", req.URL.Path)
+		assert.Equal(t, "", req.URL.RawPath)
+
+		pipeline := newSpyPipeline()
+		_, _ = handler.Intercept(pipeline, 0, req)
+
+		received := pipeline.GetReceivedRequest()
+		assert.Equal(t, "/v1/items/a-b", received.URL.Path)
+		assert.Equal(t, "https://example.com/v1/items/a-b", received.URL.String())
+	})
+
+	t.Run("prepends replacement to escaped path preserving raw escapes", func(t *testing.T) {
+		req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com/items/a%2Fb", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "/items/a/b", req.URL.Path)
+		assert.Equal(t, "/items/a%2Fb", req.URL.RawPath)
+
+		pipeline := newSpyPipeline()
+		_, _ = handler.Intercept(pipeline, 0, req)
+
+		received := pipeline.GetReceivedRequest()
+		assert.Equal(t, "/v1/items/a/b", received.URL.Path)
+		assert.Equal(t, "/v1/items/a%2Fb", received.URL.RawPath)
+		assert.Equal(t, "/v1/items/a%2Fb", received.URL.RequestURI())
+		assert.Equal(t, "https://example.com/v1/items/a%2Fb", received.URL.String())
+
+		// Verify on the wire with an actual HTTP server
+		serverReceivedURI := ""
+		ts := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+			serverReceivedURI = r.RequestURI
+			w.WriteHeader(nethttp.StatusOK)
+		}))
+		defer ts.Close()
+
+		wireReq, err := nethttp.NewRequest(nethttp.MethodGet, ts.URL+"/items/a%2Fb", nil)
+		require.NoError(t, err)
+		_, _ = handler.Intercept(pipeline, 0, wireReq)
+
+		resp, err := ts.Client().Do(pipeline.GetReceivedRequest())
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+
+		assert.Equal(t, "/v1/items/a%2Fb", serverReceivedURI, "wire URL must prepend empty-key replacement while preserving encoded slash")
+	})
+}
