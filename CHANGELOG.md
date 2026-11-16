@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0](https://github.com/microsoft/kiota-http-go/compare/v1.6.1...v1.7.0) (2026-11-16)
+
+
+### Features
+
+* add option to retry only unprocessed mutations ([3630bdf](https://github.com/microsoft/kiota-http-go/commit/3630bdfe720aa0ed680c08fdd76b3cdd8f873d46))
+* add option to retry only unprocessed mutations ([865a020](https://github.com/microsoft/kiota-http-go/commit/865a020774c75016ff67260a0cb41585d287f8de))
+* add support for the HTTP QUERY verb (RFC 10008) ([2afc261](https://github.com/microsoft/kiota-http-go/commit/2afc2615b341e29c75d1fad9d7ddea7acaf7d832))
+
+
+### Bug Fixes
+
+* **adapter:** return early from setBaseUrlForRequestInformation when receiver is nil ([e49bc56](https://github.com/microsoft/kiota-http-go/commit/e49bc563cc160530f1675c3b3df4a48ad5d6c77d))
+* **compression:** preserve io.ReadSeekCloser when retrying uncompressed body on 415 ([2968606](https://github.com/microsoft/kiota-http-go/commit/29686064a42076a78ac2224e28e56a355e25c4cf))
+* don't resend a POST that a redirect turned into a GET ([0fb24d0](https://github.com/microsoft/kiota-http-go/commit/0fb24d015b0788c8e18b4f75e5d2ceda323d869f))
+* **headers:** add defensive nil-receiver guards to HeadersInspectionOptions getters ([36f1293](https://github.com/microsoft/kiota-http-go/commit/36f1293459a5e707dde2821255f0e9c4d93c034c))
+* **headers:** use isNilInterface in HeadersInspectionHandler to guard against typed nil options ([2736b46](https://github.com/microsoft/kiota-http-go/commit/2736b46f445e64b53c91ae5a3ffc25020c724274))
+* **http:** close intermediate response bodies to prevent socket leaks and honor per-request header scrubber ([2a1e879](https://github.com/microsoft/kiota-http-go/commit/2a1e879ea8777811482bf9d59f146998f9a2a5cb))
+* **http:** close intermediate response bodies to prevent socket leaks and honor per-request header scrubber ([325e128](https://github.com/microsoft/kiota-http-go/commit/325e128fd70683bf09655eaae2443ba8c685c242))
+* **http:** guard nil adapter in setBaseUrl, scope redirect span defer, and extract isNilInterface helper ([1eae204](https://github.com/microsoft/kiota-http-go/commit/1eae20491cb3a0f7936888db7ab3c0c5f196d5d8))
+* **http:** harden middleware against typed nil options, leaks, and unseekable retries ([3d663a4](https://github.com/microsoft/kiota-http-go/commit/3d663a4e07efd7684bef06a56d2bb2454ddb01b1))
+* **http:** improve adapter robustness, defensive nil-guards, and pipeline error telemetry ([e9e2ae3](https://github.com/microsoft/kiota-http-go/commit/e9e2ae377a868ee7e05ae3d00c780e68b9e6307c))
+* **retry:** stop delay timer on context cancellation to prevent timer heap leaks ([b053578](https://github.com/microsoft/kiota-http-go/commit/b053578eca5890b0d022a5fd89adb2d9001784d5))
+* **retry:** use isNilInterface in RetryHandler to fallback on typed nil options ([bcf6b4c](https://github.com/microsoft/kiota-http-go/commit/bcf6b4c26547b613163529e37b6a9ebecf116fd1))
+* **urlreplace:** guard typed-nil observability options and preserve empty-key replacements ([3b2e8e3](https://github.com/microsoft/kiota-http-go/commit/3b2e8e376e32ce442c122447ed5286d4dd768dcc))
+* **urlreplace:** preserve untouched RawPath escapes and gate span URL on EUII opt-in ([46f7a35](https://github.com/microsoft/kiota-http-go/commit/46f7a35a3bf9971cad4e21dbe02cf660555a4277))
+* **urlreplace:** synchronize RawPath and record accurate URL in telemetry span ([3aae28c](https://github.com/microsoft/kiota-http-go/commit/3aae28cb7924d775bb98c20330634e75ef4caf99))
+
 ## [1.6.1](https://github.com/microsoft/kiota-http-go/compare/v1.6.0...v1.6.1) (2026-11-09)
 
 
