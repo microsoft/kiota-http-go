@@ -136,7 +136,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 			_ = resp.Body.Close()
 		}
 		delete(req.Header, "Content-Encoding")
-		req.Body = io.NopCloser(bytes.NewBuffer(unCompressedBody))
+		req.Body = NopCloser(bytes.NewReader(unCompressedBody))
 		req.ContentLength = unCompressedContentLength
 
 		if span != nil {

@@ -343,3 +343,50 @@ func TestHeadersInspectionPipelineErrorWithoutObservabilityOptions(t *testing.T)
 	assert.ErrorIs(t, err, expectedErr)
 	assert.Nil(t, resp)
 }
+
+func TestHeadersInspectionOptionsNilReceiverDoesNotPanic(t *testing.T) {
+	var options *HeadersInspectionOptions
+	assert.NotPanics(t, func() {
+		assert.False(t, options.GetInspectRequestHeaders())
+		assert.False(t, options.GetInspectResponseHeaders())
+		assert.Nil(t, options.GetRequestHeaders())
+		assert.Nil(t, options.GetResponseHeaders())
+		assert.Equal(t, headersInspectionKeyValue, options.GetKey())
+	})
+}
+
+func TestHeadersInspectionTypedNilOptionInContext(t *testing.T) {
+	options := NewHeadersInspectionOptions()
+	options.InspectRequestHeaders = true
+	options.InspectResponseHeaders = true
+	handler := NewHeadersInspectionHandlerWithOptions(*options)
+
+	req, err := nethttp.NewRequest(nethttp.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+	req.Header.Set("X-Custom-Request-Header", "request-val")
+
+	var nilOpt *HeadersInspectionOptions
+	ctx := context.WithValue(req.Context(), headersInspectionKeyValue, nilOpt)
+	req = req.WithContext(ctx)
+
+	respHeader := nethttp.Header{}
+	respHeader.Set("X-Custom-Response-Header", "response-val")
+
+	pipeline := &stubPipeline{
+		response: &nethttp.Response{
+			StatusCode: nethttp.StatusOK,
+			Header:     respHeader,
+		},
+	}
+	assert.NotPanics(t, func() {
+		resp, err := handler.Intercept(pipeline, 0, req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	})
+
+	assert.True(t, options.GetRequestHeaders().ContainsKey("X-Custom-Request-Header"))
+	assert.Equal(t, []string{"request-val"}, options.GetRequestHeaders().Get("X-Custom-Request-Header"))
+	assert.True(t, options.GetResponseHeaders().ContainsKey("X-Custom-Response-Header"))
+	assert.Equal(t, []string{"response-val"}, options.GetResponseHeaders().Get("X-Custom-Response-Header"))
+}
