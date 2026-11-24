@@ -3,9 +3,11 @@ package nethttplibrary
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	abstractions "github.com/microsoft/kiota-abstractions-go"
@@ -30,6 +32,8 @@ type compression interface {
 }
 
 var compressKey = abstractions.RequestOptionKey{Key: "CompressionHandler"}
+
+type compressedRequestKey struct{}
 
 // NewCompressionHandler creates an instance of a compression middleware
 func NewCompressionHandler() *CompressionHandler {
@@ -100,7 +104,6 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	}
 
 	unCompressedBody, err := io.ReadAll(req.Body)
-	unCompressedContentLength := req.ContentLength
 	if err != nil {
 		if span != nil {
 			span.RecordError(err)
@@ -108,7 +111,7 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		return nil, err
 	}
 
-	compressedBody, size, err := compressReqBody(unCompressedBody)
+	compressedBody, err := compressReqBody(unCompressedBody)
 	if err != nil {
 		if span != nil {
 			span.RecordError(err)
@@ -116,9 +119,31 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		return nil, err
 	}
 
+	originalGetBody := req.GetBody
+	originalContentLength := req.ContentLength
+	originalLengthHeader, hasLengthHeader := req.Header["Content-Length"]
+	getUncompressedBody := func() io.ReadSeekCloser {
+		return NopCloser(bytes.NewReader(unCompressedBody))
+	}
+	if originalGetBody == nil {
+		originalGetBody = func() (io.ReadCloser, error) {
+			return getUncompressedBody(), nil
+		}
+	}
+	getCompressedBody := func() io.ReadSeekCloser {
+		return NopCloser(bytes.NewReader(compressedBody))
+	}
+	compressionAttempt := new(byte)
+	req = req.Clone(context.WithValue(req.Context(), compressedRequestKey{}, compressionAttempt))
 	req.Header.Set("Content-Encoding", "gzip")
-	req.Body = compressedBody
-	req.ContentLength = int64(size)
+	req.Body = getCompressedBody()
+	req.GetBody = func() (io.ReadCloser, error) {
+		return getCompressedBody(), nil
+	}
+	req.ContentLength = int64(len(compressedBody))
+	if hasLengthHeader {
+		req.Header.Set("Content-Length", strconv.Itoa(len(compressedBody)))
+	}
 
 	if span != nil {
 		span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)))
@@ -130,21 +155,30 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		return nil, err
 	}
 
-	// If response has status 415 retry request with uncompressed body
-	if resp != nil && resp.StatusCode == 415 {
+	// A 415 can come from a later redirect hop. Only resend the request that actually carried this gzip body.
+	if resp != nil && resp.StatusCode == http.StatusUnsupportedMediaType &&
+		resp.Request != nil && resp.Request.Context().Value(compressedRequestKey{}) == compressionAttempt &&
+		resp.Request.Body != nil && resp.Request.Body != http.NoBody && resp.Request.Header.Get("Content-Encoding") == "gzip" {
 		if resp.Body != nil {
 			_ = resp.Body.Close()
 		}
-		delete(req.Header, "Content-Encoding")
-		req.Body = NopCloser(bytes.NewReader(unCompressedBody))
-		req.ContentLength = unCompressedContentLength
+		fallback := resp.Request.Clone(resp.Request.Context())
+		fallback.Header.Del("Content-Encoding")
+		fallback.Body = getUncompressedBody()
+		fallback.GetBody = originalGetBody
+		fallback.ContentLength = originalContentLength
+		if hasLengthHeader {
+			fallback.Header["Content-Length"] = originalLengthHeader
+		} else {
+			fallback.Header.Del("Content-Length")
+		}
 
 		if span != nil {
-			span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)),
+			span.SetAttributes(httpRequestBodySizeAttribute.Int(int(fallback.ContentLength)),
 				httpResponseStatusCodeAttribute.Int(415))
 		}
 
-		return pipeline.Next(req, middlewareIndex)
+		return pipeline.Next(fallback, middlewareIndex)
 	}
 
 	return resp, nil
@@ -165,17 +199,16 @@ func contentEncodingIsPresent(header http.Header) bool {
 	return ok
 }
 
-func compressReqBody(reqBody []byte) (io.ReadSeekCloser, int, error) {
+func compressReqBody(reqBody []byte) ([]byte, error) {
 	var buffer bytes.Buffer
 	gzipWriter := gzip.NewWriter(&buffer)
 	if _, err := gzipWriter.Write(reqBody); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	if err := gzipWriter.Close(); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	reader := bytes.NewReader(buffer.Bytes())
-	return NopCloser(reader), buffer.Len(), nil
+	return buffer.Bytes(), nil
 }

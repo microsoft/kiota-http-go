@@ -18,6 +18,10 @@ go get github.com/microsoft/kiota-http-go
 httpAdapter, err := kiotahttp.NewNetHttpRequestAdapter(authProvider)
 ```
 
+The default middleware chain runs URL replacement → query parameter name decoding → user agent
+→ request compression → redirect → retry → headers inspection. Go's default HTTP transport handles
+response decompression. Passing your own middleware to the client factory preserves the supplied order.
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

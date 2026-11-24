@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	nethttp "net/http"
 	httptest "net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -221,6 +223,7 @@ func TestCompressionHandlerCloses415ResponseBodyOnRetry(t *testing.T) {
 		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
 			callCount++
 			if callCount == 1 {
+				resp415.Request = r
 				return resp415, nil
 			}
 			return resp200, nil
@@ -237,18 +240,38 @@ func TestCompressionHandlerPreservesSeekableBodyOn415Retry(t *testing.T) {
 	payload := "payload data that needs to be seekable"
 	req, err := nethttp.NewRequest(nethttp.MethodPost, "https://example.com/test", strings.NewReader(payload))
 	require.NoError(t, err)
+	req.Header.Set("Content-Length", strconv.Itoa(len(payload)))
+	originalGetBody := req.GetBody
+	replays := 0
+	req.GetBody = func() (io.ReadCloser, error) {
+		replays++
+		return originalGetBody()
+	}
 
 	callCount := 0
 	pipeline := &dynamicPipeline{
 		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
 			callCount++
 			if callCount == 1 {
+				assert.Equal(t, strconv.FormatInt(r.ContentLength, 10), r.Header.Get("Content-Length"))
 				return &nethttp.Response{
 					StatusCode: 415,
 					Header:     nethttp.Header{},
 					Body:       io.NopCloser(strings.NewReader("")),
+					Request:    r,
 				}, nil
 			}
+			assert.Empty(t, r.Header.Get("Content-Encoding"))
+			assert.Equal(t, int64(len(payload)), r.ContentLength)
+			assert.Equal(t, strconv.Itoa(len(payload)), r.Header.Get("Content-Length"))
+			replay, replayErr := r.GetBody()
+			require.NoError(t, replayErr)
+			defer replay.Close()
+			replayedBody, readErr := io.ReadAll(replay)
+			require.NoError(t, readErr)
+			assert.Equal(t, payload, string(replayedBody))
+			assert.Equal(t, 1, replays, "the fallback must restore the original GetBody")
+
 			// On the retried request, verify body implements io.Seeker and can be rewound
 			seeker, ok := r.Body.(io.Seeker)
 			assert.True(t, ok, "retried uncompressed request body must implement io.Seeker")
@@ -277,3 +300,206 @@ func TestCompressionHandlerPreservesSeekableBodyOn415Retry(t *testing.T) {
 	assert.Equal(t, 2, callCount)
 }
 
+type transportWithoutResponseRequest struct {
+	http.RoundTripper
+}
+
+func (transport transportWithoutResponseRequest) RoundTrip(req *http.Request) (*http.Response, error) {
+	response, err := transport.RoundTripper.RoundTrip(req)
+	if response != nil {
+		response.Request = nil
+	}
+	return response, err
+}
+
+func TestDefaultMiddlewareCompressionFallbackAfterRedirect(t *testing.T) {
+	const payload = "payload to replay without compression"
+	type hop struct {
+		method, path, encoding, body string
+	}
+	for _, test := range []struct {
+		name        string
+		firstStatus int
+		finalStatus int
+		hasGetBody  bool
+		want        []hop
+	}{
+		{"bodyless hop", http.StatusSeeOther, http.StatusUnsupportedMediaType, false, []hop{
+			{"POST", "/start", "gzip", payload},
+			{"GET", "/reject", "", ""},
+		}},
+		{"preserved body without original replay factory", http.StatusTemporaryRedirect, http.StatusOK, false, []hop{
+			{"POST", "/start", "gzip", payload},
+			{"POST", "/reject", "gzip", payload},
+			{"POST", "/reject", "", payload},
+			{"POST", "/finish", "", payload},
+			{"POST", "/finish", "", payload},
+		}},
+		{"preserved body with original replay factory", http.StatusPermanentRedirect, http.StatusOK, true, []hop{
+			{"POST", "/start", "gzip", payload},
+			{"POST", "/reject", "gzip", payload},
+			{"POST", "/reject", "", payload},
+			{"POST", "/finish", "", payload},
+			{"POST", "/finish", "", payload},
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			hops := make(chan hop, 8)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body io.Reader = r.Body
+				encoding := r.Header.Get("Content-Encoding")
+				if encoding == "gzip" {
+					reader, err := gzip.NewReader(body)
+					if !assert.NoError(t, err) {
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					defer reader.Close()
+					body = reader
+				}
+				data, err := io.ReadAll(body)
+				assert.NoError(t, err)
+				select {
+				case hops <- hop{r.Method, r.URL.Path, encoding, string(data)}:
+				default:
+					t.Error("unexpected extra request")
+				}
+				switch r.URL.Path {
+				case "/start":
+					w.Header().Set("Location", "/reject")
+					w.WriteHeader(test.firstStatus)
+				case "/reject":
+					if encoding == "gzip" || r.Method == http.MethodGet {
+						w.WriteHeader(http.StatusUnsupportedMediaType)
+					} else {
+						w.Header().Set("Location", "/finish")
+						w.WriteHeader(http.StatusPermanentRedirect)
+					}
+				case "/finish":
+					if r.Header.Get("Retry-Attempt") == "" {
+						w.Header().Set("Retry-After", "0")
+						w.WriteHeader(http.StatusServiceUnavailable)
+					}
+				}
+			}))
+			defer server.Close()
+
+			var body io.Reader = strings.NewReader(payload)
+			if !test.hasGetBody {
+				body = NopCloser(strings.NewReader(payload))
+			}
+			req, err := http.NewRequest(http.MethodPost, server.URL+"/start", body)
+			require.NoError(t, err)
+			req.ContentLength = int64(len(payload))
+			client := getDefaultClientWithoutMiddleware()
+			client.Transport = NewCustomTransportWithParentTransport(transportWithoutResponseRequest{GetDefaultTransport()})
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			assert.Equal(t, test.finalStatus, resp.StatusCode)
+			require.Len(t, hops, len(test.want))
+			for _, expected := range test.want {
+				assert.Equal(t, expected, <-hops)
+			}
+		})
+	}
+}
+
+func TestRetryBeforeCompressionReplaysOriginalBody(t *testing.T) {
+	const payload = "payload consumed by compression on each attempt"
+	bodies := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reader, err := gzip.NewReader(r.Body)
+		if !assert.NoError(t, err) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer reader.Close()
+		body, err := io.ReadAll(reader)
+		assert.NoError(t, err)
+		bodies <- string(body)
+		if r.Header.Get("Retry-Attempt") == "" {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer server.Close()
+
+	client := GetDefaultClient(NewRetryHandler(), NewCompressionHandler())
+	req, err := http.NewRequest(http.MethodPost, server.URL, strings.NewReader(payload))
+	require.NoError(t, err)
+	req = req.WithContext(context.WithValue(req.Context(), (&ObservabilityOptions{}).GetKey(), &ObservabilityOptions{}))
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Len(t, bodies, 2)
+	assert.Equal(t, payload, <-bodies)
+	assert.Equal(t, payload, <-bodies)
+}
+
+func TestDefaultMiddlewareReplaysCompressedBodyThroughRedirectsAndRetry(t *testing.T) {
+	const payload = "payload sent through redirects and retry"
+	type hop struct {
+		path, method, encoding, retryAttempt string
+		length                               int64
+		body                                 []byte
+	}
+	hops := make(chan hop, 8)
+	server := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		select {
+		case hops <- hop{r.URL.Path, r.Method, r.Header.Get("Content-Encoding"), r.Header.Get("Retry-Attempt"), r.ContentLength, body}:
+		default:
+			t.Error("unexpected extra request")
+		}
+
+		switch r.URL.Path {
+		case "/start":
+			w.Header().Set("Location", "/next")
+			w.WriteHeader(nethttp.StatusTemporaryRedirect)
+		case "/next":
+			w.Header().Set("Location", "/target")
+			w.WriteHeader(nethttp.StatusPermanentRedirect)
+		case "/target":
+			if r.Header.Get("Retry-Attempt") == "" {
+				w.Header().Set("Retry-After", "0")
+				w.WriteHeader(nethttp.StatusServiceUnavailable)
+			}
+		}
+	}))
+	defer server.Close()
+
+	// Like requests from the adapter, this request has no original GetBody.
+	req, err := nethttp.NewRequest(nethttp.MethodPost, server.URL+"/start", NopCloser(strings.NewReader(payload)))
+	require.NoError(t, err)
+	req.ContentLength = int64(len(payload))
+	resp, err := GetDefaultClient().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	require.Len(t, hops, 4)
+
+	var firstBody []byte
+	for i, path := range []string{"/start", "/next", "/target", "/target"} {
+		got := <-hops
+		assert.Equal(t, path, got.path)
+		assert.Equal(t, nethttp.MethodPost, got.method)
+		assert.Equal(t, "gzip", got.encoding)
+		assert.Equal(t, int64(len(got.body)), got.length)
+		if i == 0 {
+			firstBody = got.body
+			reader, err := gzip.NewReader(bytes.NewReader(firstBody))
+			require.NoError(t, err)
+			defer reader.Close()
+			decoded, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			assert.Equal(t, payload, string(decoded))
+		}
+		if i == 3 {
+			assert.Equal(t, "1", got.retryAttempt)
+		}
+		assert.Equal(t, firstBody, got.body)
+	}
+}

@@ -76,12 +76,14 @@ func getDefaultClientWithoutMiddleware() *nethttp.Client {
 	}
 }
 
-// GetDefaultMiddlewares creates a new default set of middlewares for the Kiota request adapter
+// GetDefaultMiddlewares creates the default middleware chain for the Kiota request adapter.
+// Compression runs before redirect and retry so they can replay the compressed body.
+// Redirect runs before retry so each redirect hop is retried independently.
 func GetDefaultMiddlewares() []Middleware {
 	return getDefaultMiddleWare(make(map[abs.RequestOptionKey]Middleware))
 }
 
-// GetDefaultMiddlewaresWithOptions creates a new default set of middlewares for the Kiota request adapter with options
+// GetDefaultMiddlewaresWithOptions configures the default middleware chain without changing its order.
 func GetDefaultMiddlewaresWithOptions(requestOptions ...abs.RequestOption) ([]Middleware, error) {
 	if len(requestOptions) == 0 {
 		return GetDefaultMiddlewares(), nil
@@ -121,40 +123,26 @@ func GetDefaultMiddlewaresWithOptions(requestOptions ...abs.RequestOption) ([]Mi
 
 // getDefaultMiddleWare creates a new default set of middlewares for the Kiota request adapter
 func getDefaultMiddleWare(middlewareMap map[abs.RequestOptionKey]Middleware) []Middleware {
-	middlewareSource := map[abs.RequestOptionKey]func() Middleware{
-		retryKeyValue: func() Middleware {
-			return NewRetryHandler()
-		},
-		redirectKeyValue: func() Middleware {
-			return NewRedirectHandler()
-		},
-		compressKey: func() Middleware {
-			return NewCompressionHandler()
-		},
-		parametersNameDecodingKeyValue: func() Middleware {
-			return NewParametersNameDecodingHandler()
-		},
-		userAgentKeyValue: func() Middleware {
-			return NewUserAgentHandler()
-		},
-		headersInspectionKeyValue: func() Middleware {
-			return NewHeadersInspectionHandler()
-		},
-		urlReplaceOptionKey: func() Middleware {
-			return NewUrlReplaceHandlerWithOptions(*NewUrlReplaceOptions())
-		},
+	middlewareSource := []struct {
+		key    abs.RequestOptionKey
+		create func() Middleware
+	}{
+		{urlReplaceOptionKey, func() Middleware { return NewUrlReplaceHandlerWithOptions(*NewUrlReplaceOptions()) }},
+		{parametersNameDecodingKeyValue, func() Middleware { return NewParametersNameDecodingHandler() }},
+		{userAgentKeyValue, func() Middleware { return NewUserAgentHandler() }},
+		{compressKey, func() Middleware { return NewCompressionHandler() }},
+		{redirectKeyValue, func() Middleware { return NewRedirectHandler() }},
+		{retryKeyValue, func() Middleware { return NewRetryHandler() }},
+		{headersInspectionKeyValue, func() Middleware { return NewHeadersInspectionHandler() }},
 	}
 
-	// loop over middlewareSource and add any middleware that wasn't provided in the requestOptions
-	for key, value := range middlewareSource {
-		if _, ok := middlewareMap[key]; !ok {
-			middlewareMap[key] = value()
+	middleware := make([]Middleware, 0, len(middlewareSource))
+	for _, source := range middlewareSource {
+		handler, ok := middlewareMap[source.key]
+		if !ok {
+			handler = source.create()
 		}
-	}
-
-	var middleware []Middleware
-	for _, value := range middlewareMap {
-		middleware = append(middleware, value)
+		middleware = append(middleware, handler)
 	}
 
 	return middleware

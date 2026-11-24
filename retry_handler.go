@@ -177,10 +177,17 @@ func (middleware RetryHandler) retryRequest(ctx context.Context, pipeline Pipeli
 		delay := middleware.getRetryDelay(req, resp, options, executionCount)
 		cumulativeDelay += delay
 		req.Header.Set(retryAttemptHeader, strconv.Itoa(executionCount))
-		if req.Body != nil {
-			s, ok := req.Body.(io.Seeker)
-			if ok {
-				s.Seek(0, io.SeekStart)
+		if req.Body != nil && req.Body != nethttp.NoBody {
+			if seeker, ok := req.Body.(io.Seeker); ok {
+				if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+					return nil, fmt.Errorf("rewind retry request body: %w", err)
+				}
+			} else if req.GetBody != nil {
+				body, err := req.GetBody()
+				if err != nil {
+					return nil, fmt.Errorf("recreate retry request body: %w", err)
+				}
+				req.Body = body
 			}
 		}
 		var attemptSpan trace.Span
