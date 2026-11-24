@@ -117,3 +117,36 @@ func TestGetDefaultMiddlewares(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultMiddlewareOrder(t *testing.T) {
+	expected := []Middleware{
+		(*RedirectHandler)(nil),
+		(*RetryHandler)(nil),
+		(*CompressionHandler)(nil),
+		(*ParametersNameDecodingHandler)(nil),
+		(*UserAgentHandler)(nil),
+		(*HeadersInspectionHandler)(nil),
+		(*UrlReplaceHandler)(nil),
+	}
+	configured, err := GetDefaultMiddlewaresWithOptions(&RetryHandlerOptions{}, &RedirectHandlerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name       string
+		middleware []Middleware
+	}{
+		{"defaults", GetDefaultMiddlewares()},
+		{"with overrides", configured},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if len(test.middleware) != len(expected) {
+				t.Fatalf("expected %d middleware, got %d", len(expected), len(test.middleware))
+			}
+			for i, handler := range test.middleware {
+				assert.IsType(t, expected[i], handler, "middleware at position %d", i)
+			}
+		})
+	}
+}
