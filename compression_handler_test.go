@@ -309,16 +309,25 @@ func TestDefaultMiddlewareCompressionFallbackAfterRedirect(t *testing.T) {
 		name        string
 		firstStatus int
 		finalStatus int
+		hasGetBody  bool
 		want        []hop
 	}{
-		{"bodyless hop", http.StatusSeeOther, http.StatusUnsupportedMediaType, []hop{
+		{"bodyless hop", http.StatusSeeOther, http.StatusUnsupportedMediaType, false, []hop{
 			{"POST", "/start", "gzip", payload},
 			{"GET", "/reject", "", ""},
 		}},
-		{"preserved body and subsequent redirect", http.StatusTemporaryRedirect, http.StatusOK, []hop{
+		{"preserved body without original replay factory", http.StatusTemporaryRedirect, http.StatusOK, false, []hop{
 			{"POST", "/start", "gzip", payload},
 			{"POST", "/reject", "gzip", payload},
 			{"POST", "/reject", "", payload},
+			{"POST", "/finish", "", payload},
+			{"POST", "/finish", "", payload},
+		}},
+		{"preserved body with original replay factory", http.StatusPermanentRedirect, http.StatusOK, true, []hop{
+			{"POST", "/start", "gzip", payload},
+			{"POST", "/reject", "gzip", payload},
+			{"POST", "/reject", "", payload},
+			{"POST", "/finish", "", payload},
 			{"POST", "/finish", "", payload},
 		}},
 	} {
@@ -354,13 +363,21 @@ func TestDefaultMiddlewareCompressionFallbackAfterRedirect(t *testing.T) {
 						w.Header().Set("Location", "/finish")
 						w.WriteHeader(http.StatusPermanentRedirect)
 					}
+				case "/finish":
+					if r.Header.Get("Retry-Attempt") == "" {
+						w.Header().Set("Retry-After", "0")
+						w.WriteHeader(http.StatusServiceUnavailable)
+					}
 				}
 			}))
 			defer server.Close()
 
-			req, err := http.NewRequest(http.MethodPost, server.URL+"/start", NopCloser(strings.NewReader(payload)))
+			var body io.Reader = strings.NewReader(payload)
+			if !test.hasGetBody {
+				body = NopCloser(strings.NewReader(payload))
+			}
+			req, err := http.NewRequest(http.MethodPost, server.URL+"/start", body)
 			require.NoError(t, err)
-			require.Nil(t, req.GetBody)
 			req.ContentLength = int64(len(payload))
 			resp, err := GetDefaultClient().Do(req)
 			require.NoError(t, err)
@@ -372,6 +389,39 @@ func TestDefaultMiddlewareCompressionFallbackAfterRedirect(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRetryBeforeCompressionReplaysOriginalBody(t *testing.T) {
+	const payload = "payload consumed by compression on each attempt"
+	bodies := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reader, err := gzip.NewReader(r.Body)
+		if !assert.NoError(t, err) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer reader.Close()
+		body, err := io.ReadAll(reader)
+		assert.NoError(t, err)
+		bodies <- string(body)
+		if r.Header.Get("Retry-Attempt") == "" {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer server.Close()
+
+	client := GetDefaultClient(NewRetryHandler(), NewCompressionHandler())
+	req, err := http.NewRequest(http.MethodPost, server.URL, strings.NewReader(payload))
+	require.NoError(t, err)
+	req = req.WithContext(context.WithValue(req.Context(), (&ObservabilityOptions{}).GetKey(), &ObservabilityOptions{}))
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Len(t, bodies, 2)
+	assert.Equal(t, payload, <-bodies)
+	assert.Equal(t, payload, <-bodies)
 }
 
 func TestDefaultMiddlewareReplaysCompressedBodyThroughRedirectsAndRetry(t *testing.T) {
