@@ -50,7 +50,11 @@ func (pipeline *middlewarePipeline) Next(req *nethttp.Request, middlewareIndex i
 		defer span.End()
 		req = req.WithContext(ctx)
 	}
-	return pipeline.transport.RoundTrip(req)
+	response, err := pipeline.transport.RoundTrip(req)
+	if response != nil && response.Request == nil {
+		response.Request = req
+	}
+	return response, err
 }
 
 // RoundTrip executes the the next middleware and returns a response

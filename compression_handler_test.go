@@ -300,6 +300,18 @@ func TestCompressionHandlerPreservesSeekableBodyOn415Retry(t *testing.T) {
 	assert.Equal(t, 2, callCount)
 }
 
+type transportWithoutResponseRequest struct {
+	http.RoundTripper
+}
+
+func (transport transportWithoutResponseRequest) RoundTrip(req *http.Request) (*http.Response, error) {
+	response, err := transport.RoundTripper.RoundTrip(req)
+	if response != nil {
+		response.Request = nil
+	}
+	return response, err
+}
+
 func TestDefaultMiddlewareCompressionFallbackAfterRedirect(t *testing.T) {
 	const payload = "payload to replay without compression"
 	type hop struct {
@@ -379,7 +391,9 @@ func TestDefaultMiddlewareCompressionFallbackAfterRedirect(t *testing.T) {
 			req, err := http.NewRequest(http.MethodPost, server.URL+"/start", body)
 			require.NoError(t, err)
 			req.ContentLength = int64(len(payload))
-			resp, err := GetDefaultClient().Do(req)
+			client := getDefaultClientWithoutMiddleware()
+			client.Transport = NewCustomTransportWithParentTransport(transportWithoutResponseRequest{GetDefaultTransport()})
+			resp, err := client.Do(req)
 			require.NoError(t, err)
 			defer resp.Body.Close()
 			assert.Equal(t, test.finalStatus, resp.StatusCode)
