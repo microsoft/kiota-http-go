@@ -77,6 +77,7 @@ func getDefaultClientWithoutMiddleware() *nethttp.Client {
 }
 
 // GetDefaultMiddlewares creates the default middleware chain for the Kiota request adapter.
+// Compression runs before redirect and retry so they can replay the compressed body.
 // Redirect runs before retry so each redirect hop is retried independently.
 func GetDefaultMiddlewares() []Middleware {
 	return getDefaultMiddleWare(make(map[abs.RequestOptionKey]Middleware))
@@ -126,13 +127,13 @@ func getDefaultMiddleWare(middlewareMap map[abs.RequestOptionKey]Middleware) []M
 		key    abs.RequestOptionKey
 		create func() Middleware
 	}{
-		{redirectKeyValue, func() Middleware { return NewRedirectHandler() }},
-		{retryKeyValue, func() Middleware { return NewRetryHandler() }},
-		{compressKey, func() Middleware { return NewCompressionHandler() }},
+		{urlReplaceOptionKey, func() Middleware { return NewUrlReplaceHandlerWithOptions(*NewUrlReplaceOptions()) }},
 		{parametersNameDecodingKeyValue, func() Middleware { return NewParametersNameDecodingHandler() }},
 		{userAgentKeyValue, func() Middleware { return NewUserAgentHandler() }},
+		{compressKey, func() Middleware { return NewCompressionHandler() }},
+		{redirectKeyValue, func() Middleware { return NewRedirectHandler() }},
+		{retryKeyValue, func() Middleware { return NewRetryHandler() }},
 		{headersInspectionKeyValue, func() Middleware { return NewHeadersInspectionHandler() }},
-		{urlReplaceOptionKey, func() Middleware { return NewUrlReplaceHandlerWithOptions(*NewUrlReplaceOptions()) }},
 	}
 
 	middleware := make([]Middleware, 0, len(middlewareSource))

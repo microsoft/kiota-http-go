@@ -120,13 +120,13 @@ func TestGetDefaultMiddlewares(t *testing.T) {
 
 func TestDefaultMiddlewareOrder(t *testing.T) {
 	expected := []Middleware{
-		(*RedirectHandler)(nil),
-		(*RetryHandler)(nil),
-		(*CompressionHandler)(nil),
+		(*UrlReplaceHandler)(nil),
 		(*ParametersNameDecodingHandler)(nil),
 		(*UserAgentHandler)(nil),
+		(*CompressionHandler)(nil),
+		(*RedirectHandler)(nil),
+		(*RetryHandler)(nil),
 		(*HeadersInspectionHandler)(nil),
-		(*UrlReplaceHandler)(nil),
 	}
 	configured, err := GetDefaultMiddlewaresWithOptions(&RetryHandlerOptions{}, &RedirectHandlerOptions{})
 	if err != nil {

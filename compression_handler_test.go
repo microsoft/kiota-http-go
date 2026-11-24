@@ -2,6 +2,7 @@ package nethttplibrary
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	nethttp "net/http"
 	httptest "net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -237,18 +239,37 @@ func TestCompressionHandlerPreservesSeekableBodyOn415Retry(t *testing.T) {
 	payload := "payload data that needs to be seekable"
 	req, err := nethttp.NewRequest(nethttp.MethodPost, "https://example.com/test", strings.NewReader(payload))
 	require.NoError(t, err)
+	req.Header.Set("Content-Length", strconv.Itoa(len(payload)))
+	originalGetBody := req.GetBody
+	replays := 0
+	req.GetBody = func() (io.ReadCloser, error) {
+		replays++
+		return originalGetBody()
+	}
 
 	callCount := 0
 	pipeline := &dynamicPipeline{
 		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
 			callCount++
 			if callCount == 1 {
+				assert.Equal(t, strconv.FormatInt(r.ContentLength, 10), r.Header.Get("Content-Length"))
 				return &nethttp.Response{
 					StatusCode: 415,
 					Header:     nethttp.Header{},
 					Body:       io.NopCloser(strings.NewReader("")),
 				}, nil
 			}
+			assert.Empty(t, r.Header.Get("Content-Encoding"))
+			assert.Equal(t, int64(len(payload)), r.ContentLength)
+			assert.Equal(t, strconv.Itoa(len(payload)), r.Header.Get("Content-Length"))
+			replay, replayErr := r.GetBody()
+			require.NoError(t, replayErr)
+			defer replay.Close()
+			replayedBody, readErr := io.ReadAll(replay)
+			require.NoError(t, readErr)
+			assert.Equal(t, payload, string(replayedBody))
+			assert.Equal(t, 1, replays, "the fallback must restore the original GetBody")
+
 			// On the retried request, verify body implements io.Seeker and can be rewound
 			seeker, ok := r.Body.(io.Seeker)
 			assert.True(t, ok, "retried uncompressed request body must implement io.Seeker")
@@ -277,3 +298,68 @@ func TestCompressionHandlerPreservesSeekableBodyOn415Retry(t *testing.T) {
 	assert.Equal(t, 2, callCount)
 }
 
+func TestDefaultMiddlewareReplaysCompressedBodyThroughRedirectsAndRetry(t *testing.T) {
+	const payload = "payload sent through redirects and retry"
+	type hop struct {
+		path, method, encoding, retryAttempt string
+		length                               int64
+		body                                 []byte
+	}
+	hops := make(chan hop, 8)
+	server := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		select {
+		case hops <- hop{r.URL.Path, r.Method, r.Header.Get("Content-Encoding"), r.Header.Get("Retry-Attempt"), r.ContentLength, body}:
+		default:
+			t.Error("unexpected extra request")
+		}
+
+		switch r.URL.Path {
+		case "/start":
+			w.Header().Set("Location", "/next")
+			w.WriteHeader(nethttp.StatusTemporaryRedirect)
+		case "/next":
+			w.Header().Set("Location", "/target")
+			w.WriteHeader(nethttp.StatusPermanentRedirect)
+		case "/target":
+			if r.Header.Get("Retry-Attempt") == "" {
+				w.Header().Set("Retry-After", "0")
+				w.WriteHeader(nethttp.StatusServiceUnavailable)
+			}
+		}
+	}))
+	defer server.Close()
+
+	// Like requests from the adapter, this request has no original GetBody.
+	req, err := nethttp.NewRequest(nethttp.MethodPost, server.URL+"/start", NopCloser(strings.NewReader(payload)))
+	require.NoError(t, err)
+	req.ContentLength = int64(len(payload))
+	resp, err := GetDefaultClient().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	require.Len(t, hops, 4)
+
+	var firstBody []byte
+	for i, path := range []string{"/start", "/next", "/target", "/target"} {
+		got := <-hops
+		assert.Equal(t, path, got.path)
+		assert.Equal(t, nethttp.MethodPost, got.method)
+		assert.Equal(t, "gzip", got.encoding)
+		assert.Equal(t, int64(len(got.body)), got.length)
+		if i == 0 {
+			firstBody = got.body
+			reader, err := gzip.NewReader(bytes.NewReader(firstBody))
+			require.NoError(t, err)
+			defer reader.Close()
+			decoded, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			assert.Equal(t, payload, string(decoded))
+		}
+		if i == 3 {
+			assert.Equal(t, "1", got.retryAttempt)
+		}
+		assert.Equal(t, firstBody, got.body)
+	}
+}
