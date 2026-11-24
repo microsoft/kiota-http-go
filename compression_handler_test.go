@@ -223,6 +223,7 @@ func TestCompressionHandlerCloses415ResponseBodyOnRetry(t *testing.T) {
 		next: func(r *nethttp.Request, index int) (*nethttp.Response, error) {
 			callCount++
 			if callCount == 1 {
+				resp415.Request = r
 				return resp415, nil
 			}
 			return resp200, nil
@@ -257,6 +258,7 @@ func TestCompressionHandlerPreservesSeekableBodyOn415Retry(t *testing.T) {
 					StatusCode: 415,
 					Header:     nethttp.Header{},
 					Body:       io.NopCloser(strings.NewReader("")),
+					Request:    r,
 				}, nil
 			}
 			assert.Empty(t, r.Header.Get("Content-Encoding"))
@@ -296,6 +298,80 @@ func TestCompressionHandlerPreservesSeekableBodyOn415Retry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
 	assert.Equal(t, 2, callCount)
+}
+
+func TestDefaultMiddlewareCompressionFallbackAfterRedirect(t *testing.T) {
+	const payload = "payload to replay without compression"
+	type hop struct {
+		method, path, encoding, body string
+	}
+	for _, test := range []struct {
+		name        string
+		firstStatus int
+		finalStatus int
+		want        []hop
+	}{
+		{"bodyless hop", http.StatusSeeOther, http.StatusUnsupportedMediaType, []hop{
+			{"POST", "/start", "gzip", payload},
+			{"GET", "/reject", "", ""},
+		}},
+		{"preserved body and subsequent redirect", http.StatusTemporaryRedirect, http.StatusOK, []hop{
+			{"POST", "/start", "gzip", payload},
+			{"POST", "/reject", "gzip", payload},
+			{"POST", "/reject", "", payload},
+			{"POST", "/finish", "", payload},
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			hops := make(chan hop, 8)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body io.Reader = r.Body
+				encoding := r.Header.Get("Content-Encoding")
+				if encoding == "gzip" {
+					reader, err := gzip.NewReader(body)
+					if !assert.NoError(t, err) {
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					defer reader.Close()
+					body = reader
+				}
+				data, err := io.ReadAll(body)
+				assert.NoError(t, err)
+				select {
+				case hops <- hop{r.Method, r.URL.Path, encoding, string(data)}:
+				default:
+					t.Error("unexpected extra request")
+				}
+				switch r.URL.Path {
+				case "/start":
+					w.Header().Set("Location", "/reject")
+					w.WriteHeader(test.firstStatus)
+				case "/reject":
+					if encoding == "gzip" || r.Method == http.MethodGet {
+						w.WriteHeader(http.StatusUnsupportedMediaType)
+					} else {
+						w.Header().Set("Location", "/finish")
+						w.WriteHeader(http.StatusPermanentRedirect)
+					}
+				}
+			}))
+			defer server.Close()
+
+			req, err := http.NewRequest(http.MethodPost, server.URL+"/start", NopCloser(strings.NewReader(payload)))
+			require.NoError(t, err)
+			require.Nil(t, req.GetBody)
+			req.ContentLength = int64(len(payload))
+			resp, err := GetDefaultClient().Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			assert.Equal(t, test.finalStatus, resp.StatusCode)
+			require.Len(t, hops, len(test.want))
+			for _, expected := range test.want {
+				assert.Equal(t, expected, <-hops)
+			}
+		})
+	}
 }
 
 func TestDefaultMiddlewareReplaysCompressedBodyThroughRedirectsAndRetry(t *testing.T) {

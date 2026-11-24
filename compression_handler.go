@@ -3,6 +3,7 @@ package nethttplibrary
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -31,6 +32,8 @@ type compression interface {
 }
 
 var compressKey = abstractions.RequestOptionKey{Key: "CompressionHandler"}
+
+type compressedRequestKey struct{}
 
 // NewCompressionHandler creates an instance of a compression middleware
 func NewCompressionHandler() *CompressionHandler {
@@ -119,9 +122,19 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 	originalGetBody := req.GetBody
 	originalContentLength := req.ContentLength
 	originalLengthHeader, hasLengthHeader := req.Header["Content-Length"]
+	getUncompressedBody := func() io.ReadSeekCloser {
+		return NopCloser(bytes.NewReader(unCompressedBody))
+	}
+	if originalGetBody == nil {
+		originalGetBody = func() (io.ReadCloser, error) {
+			return getUncompressedBody(), nil
+		}
+	}
 	getCompressedBody := func() io.ReadSeekCloser {
 		return NopCloser(bytes.NewReader(compressedBody))
 	}
+	compressionAttempt := new(byte)
+	req = req.Clone(context.WithValue(req.Context(), compressedRequestKey{}, compressionAttempt))
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Body = getCompressedBody()
 	req.GetBody = func() (io.ReadCloser, error) {
@@ -142,25 +155,30 @@ func (c *CompressionHandler) Intercept(pipeline Pipeline, middlewareIndex int, r
 		return nil, err
 	}
 
-	// If response has status 415 retry request with uncompressed body
-	if resp != nil && resp.StatusCode == http.StatusUnsupportedMediaType {
+	// A 415 can come from a later redirect hop. Only resend the request that actually carried this gzip body.
+	if resp != nil && resp.StatusCode == http.StatusUnsupportedMediaType &&
+		resp.Request != nil && resp.Request.Context().Value(compressedRequestKey{}) == compressionAttempt &&
+		resp.Request.Body != nil && resp.Request.Body != http.NoBody && resp.Request.Header.Get("Content-Encoding") == "gzip" {
 		if resp.Body != nil {
 			_ = resp.Body.Close()
 		}
-		delete(req.Header, "Content-Encoding")
-		req.Body = NopCloser(bytes.NewReader(unCompressedBody))
-		req.GetBody = originalGetBody
-		req.ContentLength = originalContentLength
+		fallback := resp.Request.Clone(resp.Request.Context())
+		fallback.Header.Del("Content-Encoding")
+		fallback.Body = getUncompressedBody()
+		fallback.GetBody = originalGetBody
+		fallback.ContentLength = originalContentLength
 		if hasLengthHeader {
-			req.Header["Content-Length"] = originalLengthHeader
+			fallback.Header["Content-Length"] = originalLengthHeader
+		} else {
+			fallback.Header.Del("Content-Length")
 		}
 
 		if span != nil {
-			span.SetAttributes(httpRequestBodySizeAttribute.Int(int(req.ContentLength)),
+			span.SetAttributes(httpRequestBodySizeAttribute.Int(int(fallback.ContentLength)),
 				httpResponseStatusCodeAttribute.Int(415))
 		}
 
-		return pipeline.Next(req, middlewareIndex)
+		return pipeline.Next(fallback, middlewareIndex)
 	}
 
 	return resp, nil
