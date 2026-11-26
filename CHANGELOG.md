@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.1](https://github.com/microsoft/kiota-http-go/compare/v1.7.0...v1.7.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* align default middleware order and replay compressed bodies ([4705f04](https://github.com/microsoft/kiota-http-go/commit/4705f0454fd4642a18971d9de4da1487cfb402be))
+* make default middleware order deterministic ([41e3e7f](https://github.com/microsoft/kiota-http-go/commit/41e3e7f19992581db20a9c4958fbb216c6edb830))
+* make default middleware order deterministic ([eaf6049](https://github.com/microsoft/kiota-http-go/commit/eaf604932b2bfa72481f43b2848bfe76c9e4dcb6))
+* preserve response request identity with custom transports ([517a6f9](https://github.com/microsoft/kiota-http-go/commit/517a6f9b169f71dee9d3a447647bff7286d1a5a6))
+* recreate non-seekable request bodies on retry ([d6ba452](https://github.com/microsoft/kiota-http-go/commit/d6ba4523fc5783a38a61143231e51e28d2d4167b))
+* retry only the compressed hop on a 415 ([0b83ac6](https://github.com/microsoft/kiota-http-go/commit/0b83ac62cf8a0f9e8a7e67e22de41a0ecf310838))
+
 ## [1.7.0](https://github.com/microsoft/kiota-http-go/compare/v1.6.1...v1.7.0) (2026-11-16)
 
 
